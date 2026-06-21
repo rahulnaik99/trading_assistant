@@ -11,6 +11,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from backend.agents.analysis_agent import AnalysisAgent
 from backend.agents.execution_agent import ExecutionAgent
 from backend.llm.factory import LLMFactory, traceable
+from backend.mcp.connector import call_mcp_tool
 from backend.protocol import Task, TaskResponse
 
 logger = logging.getLogger(__name__)
@@ -19,16 +20,21 @@ _ROUTER_SYSTEM = """You are a trading assistant dispatcher. Classify the user's 
 
 1. "analyse"  — user wants market analysis, price outlook, trade recommendation
 2. "execute"  — user wants to place/execute a trade
-3. "chat"     — general question, greeting, or out-of-scope
+3. "research" — user asks a factual question that needs web search:
+                 company financials (profit, revenue, EPS, PE ratio, results),
+                 economic data, news events, IPO info, FII/DII data,
+                 regulatory changes, sector data, macroeconomic figures
+4. "chat"     — simple greeting, general knowledge, or out-of-scope
 
 Extract:
 - symbol: e.g. "NSE:RELIANCE-EQ", "BTCUSDT", "NIFTY50" — normalise to exchange format
 - source: "fyers" for Indian equities/indices, "delta" for crypto
 - trade_type: "intraday", "swing", or "longterm"
-- intent: "analyse", "execute", or "chat"
+- intent: "analyse", "execute", "research", or "chat"
+- search_query: for research intent, the best web search query (empty string otherwise)
 
 Respond ONLY with JSON:
-{"intent": string, "symbol": string, "source": string, "trade_type": string}"""
+{"intent": string, "symbol": string, "source": string, "trade_type": string, "search_query": string}"""
 
 # Symbol normalisation helpers
 _FYERS_MAP = {
@@ -102,12 +108,14 @@ class OrchestratorAgent:
             cleaned = re.sub(r"```json|```", "", route_resp.content).strip()
             route = json.loads(cleaned)
         except Exception:
-            route = {"intent": "chat", "symbol": "BTCUSDT", "source": "delta", "trade_type": "intraday"}
+            route = {"intent": "chat", "symbol": "BTCUSDT", "source": "delta",
+                     "trade_type": "intraday", "search_query": ""}
 
-        intent     = route.get("intent", "chat")
-        symbol_raw = route.get("symbol", "BTCUSDT")
-        source     = route.get("source", "delta")
-        trade_type = route.get("trade_type", "intraday")
+        intent       = route.get("intent", "chat")
+        symbol_raw   = route.get("symbol", "BTCUSDT")
+        source       = route.get("source", "delta")
+        trade_type   = route.get("trade_type", "intraday")
+        search_query = route.get("search_query", "") or user_message
 
         # Normalise symbol
         symbol, source_inferred = _normalise(symbol_raw)
@@ -169,15 +177,42 @@ class OrchestratorAgent:
                 result["reply"] = f"Execution failed: {e_resp.error or 'unknown error'}"
 
         else:
-            # General chat — use LLM with trading context
-            logger.info("► Chat response")
-            msgs = [SystemMessage(content=(
-                "You are a helpful trading assistant for Indian equities (NSE) and crypto (Delta Exchange). "
-                "Answer concisely. If the user wants analysis or trade execution, tell them to ask specifically."
-            ))]
+            # ── Research: search web first, then answer with LLM ─────────────
+            if intent == "research":
+                logger.info("► Research intent — calling Tavily MCP  query=%s", search_query[:80])
+                search_result_json = await call_mcp_tool(
+                    server="tavily",
+                    tool="search_market",
+                    arguments={"query": search_query, "max_results": 5},
+                )
+                search_data = json.loads(search_result_json)
+                headlines = [r.get("title", "") for r in search_data.get("results", []) if r.get("title")]
+                answer    = search_data.get("answer", "")
+                web_context = ""
+                if answer:
+                    web_context = f"Web search answer: {answer}\n\n"
+                if headlines:
+                    web_context += "Recent sources:\n" + "\n".join(f"• {h}" for h in headlines[:5])
+                logger.info("► Research complete  sources=%d  answer_len=%d",
+                            len(headlines), len(answer))
+            else:
+                web_context = ""
+
+            # General chat / research — use LLM with web context
+            logger.info("► %s response", "Research" if intent == "research" else "Chat")
+            system_prompt = (
+                "You are a knowledgeable trading and finance assistant covering Indian equities "
+                "(NSE/BSE) and global crypto markets. Answer concisely and accurately.\n"
+                "If web search results are provided below, use them as your primary source. "
+                "Always mention if data may be outdated."
+            )
+            if web_context:
+                system_prompt += f"\n\n--- WEB SEARCH RESULTS ---\n{web_context}\n---"
+
+            msgs = [SystemMessage(content=system_prompt)]
             if history:
                 from langchain_core.messages import AIMessage
-                for h in history[-6:]:  # last 6 turns
+                for h in history[-6:]:
                     if h["role"] == "user":
                         msgs.append(HumanMessage(content=h["content"]))
                     else:
