@@ -6,13 +6,13 @@ import re
 import uuid
 from typing import Any
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from backend.agents.analysis_agent import AnalysisAgent
 from backend.agents.execution_agent import ExecutionAgent
 from backend.llm.factory import LLMFactory, traceable
 from backend.mcp.connector import call_mcp_tool
-from backend.protocol import Task, TaskResponse
+from backend.protocol import Task
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ _ROUTER_SYSTEM = """You are a trading assistant dispatcher. Classify the user's 
 4. "chat"     — simple greeting, general knowledge, or out-of-scope
 
 Extract:
-- symbol: e.g. "NSE:RELIANCE-EQ", "BTCUSDT", "NIFTY50" — normalise to exchange format
+- symbol: e.g. "NSE:CANBK-EQ", "BTCUSDT", "NIFTY50" — normalise to exchange format
 - source: "fyers" for Indian equities/indices, "delta" for crypto
 - trade_type: "intraday", "swing", or "longterm"
 - intent: "analyse", "execute", "research", or "chat"
@@ -36,15 +36,32 @@ Extract:
 Respond ONLY with JSON:
 {"intent": string, "symbol": string, "source": string, "trade_type": string, "search_query": string}"""
 
-# Symbol normalisation helpers
-_FYERS_MAP = {
+# ── Symbol maps ────────────────────────────────────────────────────────────────
+_FYERS_MAP: dict[str, str] = {
     "reliance": "NSE:RELIANCE-EQ", "tcs": "NSE:TCS-EQ",
     "nifty": "NSE:NIFTY50-INDEX", "banknifty": "NSE:NIFTYBANK-INDEX",
     "sbin": "NSE:SBIN-EQ", "hdfcbank": "NSE:HDFCBANK-EQ",
     "infy": "NSE:INFY-EQ", "wipro": "NSE:WIPRO-EQ",
-    "icicibank": "NSE:ICICIBANK-EQ",
+    "icicibank": "NSE:ICICIBANK-EQ", "axisbank": "NSE:AXISBANK-EQ",
+    "kotak": "NSE:KOTAKBANK-EQ", "kotakbank": "NSE:KOTAKBANK-EQ",
+    # Public sector banks
+    "canara": "NSE:CANBK-EQ", "canarabank": "NSE:CANBK-EQ", "canbk": "NSE:CANBK-EQ",
+    "pnb": "NSE:PNB-EQ", "punjabnational": "NSE:PNB-EQ",
+    "bankbaroda": "NSE:BANKBARODA-EQ", "bob": "NSE:BANKBARODA-EQ",
+    "unionbank": "NSE:UNIONBANK-EQ", "indianbank": "NSE:INDIANB-EQ",
+    "boi": "NSE:BANKINDIA-EQ", "bankindia": "NSE:BANKINDIA-EQ",
+    # Large caps
+    "tatamotors": "NSE:TATAMOTORS-EQ", "tatasteel": "NSE:TATASTEEL-EQ",
+    "maruti": "NSE:MARUTI-EQ", "bajajfinance": "NSE:BAJFINANCE-EQ",
+    "bajajfinserv": "NSE:BAJAJFINSV-EQ", "hul": "NSE:HINDUNILVR-EQ",
+    "hindunilvr": "NSE:HINDUNILVR-EQ", "asianpaint": "NSE:ASIANPAINT-EQ",
+    "sunpharma": "NSE:SUNPHARMA-EQ", "drreddy": "NSE:DRREDDY-EQ",
+    "ongc": "NSE:ONGC-EQ", "ntpc": "NSE:NTPC-EQ",
+    "powergrid": "NSE:POWERGRID-EQ", "adaniports": "NSE:ADANIPORTS-EQ",
+    "adanient": "NSE:ADANIENT-EQ", "lt": "NSE:LT-EQ", "larsen": "NSE:LT-EQ",
+    "rblbank": "NSE:RBLBANK-EQ", "idbi": "NSE:IDBI-EQ",
 }
-_DELTA_MAP = {
+_DELTA_MAP: dict[str, str] = {
     "btc": "BTCUSDT", "bitcoin": "BTCUSDT",
     "eth": "ETHUSDT", "ethereum": "ETHUSDT",
     "gold": "XAUUSDT", "xau": "XAUUSDT",
@@ -53,7 +70,7 @@ _DELTA_MAP = {
 
 
 def _normalise(raw: str) -> tuple[str, str]:
-    """Return (normalised_symbol, source)."""
+    """Return (normalised_symbol, source) from a raw symbol string."""
     s = raw.lower().strip()
     for k, v in _FYERS_MAP.items():
         if k in s:
@@ -61,15 +78,41 @@ def _normalise(raw: str) -> tuple[str, str]:
     for k, v in _DELTA_MAP.items():
         if k in s:
             return v, "delta"
-    # Assume crypto by default if looks like a ticker
     sym = raw.upper().replace(" ", "")
     if not sym.endswith("USDT") and not sym.startswith("NSE:"):
         sym += "USDT"
     return sym, "delta"
 
 
+def _build_result(intent: str, symbol: str, source: str, trade_type: str) -> dict[str, Any]:
+    return {"intent": intent, "symbol": symbol, "source": source,
+            "trade_type": trade_type, "analysis": None, "execution": None, "reply": ""}
+
+
+def _parse_route(content: str) -> dict:
+    try:
+        cleaned = re.sub(r"```json|```", "", content).strip()
+        return json.loads(cleaned)
+    except Exception:
+        return {"intent": "chat", "symbol": "BTCUSDT", "source": "delta",
+                "trade_type": "intraday", "search_query": ""}
+
+
+def _build_chat_messages(
+    system_prompt: str, history: list[dict], user_message: str
+) -> list:
+    msgs = [SystemMessage(content=system_prompt)]
+    for h in (history or [])[-6:]:
+        cls = HumanMessage if h["role"] == "user" else AIMessage
+        msgs.append(cls(content=h["content"]))
+    msgs.append(HumanMessage(content=user_message))
+    return msgs
+
+
+# ── Orchestrator ───────────────────────────────────────────────────────────────
+
 class OrchestratorAgent:
-    """Entry point: parses user message, routes to sub-agents, returns human reply."""
+    """Entry point — routes user messages to Analysis, Execution, Research, or Chat."""
 
     def __init__(self, llm_provider: str = "openai", mode: str = "paper") -> None:
         self._llm_provider = llm_provider
@@ -77,7 +120,7 @@ class OrchestratorAgent:
         self._analysis_agent = AnalysisAgent(llm_provider)
         self._execution_agent = ExecutionAgent(llm_provider, mode)
         self._llm = None
-        logger.info("OrchestratorAgent: init  provider=%s  mode=%s", llm_provider, mode)
+        logger.info("OrchestratorAgent init  provider=%s  mode=%s", llm_provider, mode)
 
     @property
     def llm(self):
@@ -90,153 +133,135 @@ class OrchestratorAgent:
         user_message: str,
         history: list[dict] | None = None,
     ) -> dict[str, Any]:
-        """Process a user message and return {reply, intent, analysis, execution, tokens}.
-
-        history: list of {role, content} dicts for conversation context.
-        """
+        """Route user message → sub-agent → formatted reply."""
         task_id = str(uuid.uuid4())[:8]
-        logger.info("orchestrator: message  id=%s  msg=%s", task_id, user_message[:80])
+        logger.info("orchestrator msg  id=%s  %s", task_id, user_message[:80])
 
-        # ── 1. Route intent ───────────────────────────────────────────────────
-        logger.info("► Routing user intent")
-        route_resp = await self.llm.ainvoke([
-            SystemMessage(content=_ROUTER_SYSTEM),
-            HumanMessage(content=user_message),
-        ])
-        route: dict = {}
-        try:
-            cleaned = re.sub(r"```json|```", "", route_resp.content).strip()
-            route = json.loads(cleaned)
-        except Exception:
-            route = {"intent": "chat", "symbol": "BTCUSDT", "source": "delta",
-                     "trade_type": "intraday", "search_query": ""}
-
+        route = await self._route(user_message)
         intent       = route.get("intent", "chat")
         symbol_raw   = route.get("symbol", "BTCUSDT")
         source       = route.get("source", "delta")
         trade_type   = route.get("trade_type", "intraday")
         search_query = route.get("search_query", "") or user_message
 
-        # Normalise symbol
-        symbol, source_inferred = _normalise(symbol_raw)
-        if source == "delta" or source == "fyers":
-            pass  # trust LLM routing
-        else:
-            source = source_inferred
+        symbol, src_inferred = _normalise(symbol_raw)
+        if source not in ("delta", "fyers"):
+            source = src_inferred
 
-        logger.info("orchestrator: route  intent=%s  symbol=%s  source=%s  type=%s",
+        logger.info("orchestrator route  intent=%s  symbol=%s  source=%s  type=%s",
                     intent, symbol, source, trade_type)
 
-        result: dict[str, Any] = {
-            "intent": intent,
-            "symbol": symbol,
-            "source": source,
-            "trade_type": trade_type,
-            "analysis": None,
-            "execution": None,
-            "reply": "",
-        }
+        result = _build_result(intent, symbol, source, trade_type)
 
-        # ── 2. Dispatch to sub-agents ─────────────────────────────────────────
         if intent == "analyse":
-            logger.info("► Dispatching to AnalysisAgent via A2A")
-            a_resp = await self._analysis_agent.handle_task(Task(
-                task_id=f"a-{task_id}", agent="analysis_agent",
-                input={"symbol": symbol, "source": source, "trade_type": trade_type},
-            ))
-            if a_resp.status == "completed":
-                analysis = next((art.data for art in a_resp.artifacts if art.type == "analysis"), {})
-                result["analysis"] = analysis
-                result["reply"] = self._format_analysis(analysis)
-            else:
-                result["reply"] = f"Analysis failed: {a_resp.error or 'unknown error'}"
-
+            result.update(await self._handle_analyse(task_id, symbol, source, trade_type))
         elif intent == "execute":
-            # First get fresh analysis
-            logger.info("► Getting fresh analysis for execution")
-            a_resp = await self._analysis_agent.handle_task(Task(
-                task_id=f"a-{task_id}", agent="analysis_agent",
-                input={"symbol": symbol, "source": source, "trade_type": trade_type},
-            ))
-            analysis = {}
-            if a_resp.status == "completed":
-                analysis = next((art.data for art in a_resp.artifacts if art.type == "analysis"), {})
-                result["analysis"] = analysis
-
-            # Then execute
-            logger.info("► Dispatching to ExecutionAgent via A2A")
-            e_resp = await self._execution_agent.handle_task(Task(
-                task_id=f"e-{task_id}", agent="execution_agent",
-                input={"analysis": analysis, "source": source, "mode": self._mode},
-            ))
-            if e_resp.status == "completed":
-                execution = next((art.data for art in e_resp.artifacts if art.type == "execution"), {})
-                result["execution"] = execution
-                result["reply"] = self._format_execution(execution)
-            else:
-                result["reply"] = f"Execution failed: {e_resp.error or 'unknown error'}"
-
+            result.update(await self._handle_execute(task_id, symbol, source, trade_type))
+        elif intent == "research":
+            result["reply"] = await self._handle_research(search_query, user_message, history)
         else:
-            # ── Research: search web first, then answer with LLM ─────────────
-            if intent == "research":
-                logger.info("► Research intent — calling Tavily MCP  query=%s", search_query[:80])
-                search_result_json = await call_mcp_tool(
-                    server="tavily",
-                    tool="search_market",
-                    arguments={"query": search_query, "max_results": 5},
-                )
-                search_data = json.loads(search_result_json)
-                headlines = [r.get("title", "") for r in search_data.get("results", []) if r.get("title")]
-                answer    = search_data.get("answer", "")
-                web_context = ""
-                if answer:
-                    web_context = f"Web search answer: {answer}\n\n"
-                if headlines:
-                    web_context += "Recent sources:\n" + "\n".join(f"• {h}" for h in headlines[:5])
-                logger.info("► Research complete  sources=%d  answer_len=%d",
-                            len(headlines), len(answer))
-            else:
-                web_context = ""
-
-            # General chat / research — use LLM with web context
-            logger.info("► %s response", "Research" if intent == "research" else "Chat")
-            system_prompt = (
-                "You are a knowledgeable trading and finance assistant covering Indian equities "
-                "(NSE/BSE) and global crypto markets. Answer concisely and accurately.\n"
-                "If web search results are provided below, use them as your primary source. "
-                "Always mention if data may be outdated."
-            )
-            if web_context:
-                system_prompt += f"\n\n--- WEB SEARCH RESULTS ---\n{web_context}\n---"
-
-            msgs = [SystemMessage(content=system_prompt)]
-            if history:
-                from langchain_core.messages import AIMessage
-                for h in history[-6:]:
-                    if h["role"] == "user":
-                        msgs.append(HumanMessage(content=h["content"]))
-                    else:
-                        msgs.append(AIMessage(content=h["content"]))
-            msgs.append(HumanMessage(content=user_message))
-            chat_resp = await self.llm.ainvoke(msgs)
-            result["reply"] = chat_resp.content
+            result["reply"] = await self._handle_chat(user_message, history)
 
         return result
+
+    # ── Intent handlers ───────────────────────────────────────────────────────
+
+    async def _route(self, user_message: str) -> dict:
+        resp = await self.llm.ainvoke([
+            SystemMessage(content=_ROUTER_SYSTEM),
+            HumanMessage(content=user_message),
+        ])
+        return _parse_route(resp.content)
+
+    async def _handle_analyse(
+        self, task_id: str, symbol: str, source: str, trade_type: str
+    ) -> dict[str, Any]:
+        logger.info("► AnalysisAgent  symbol=%s  source=%s  type=%s", symbol, source, trade_type)
+        resp = await self._analysis_agent.handle_task(Task(
+            task_id=f"a-{task_id}", agent="analysis_agent",
+            input={"symbol": symbol, "source": source, "trade_type": trade_type},
+        ))
+        if resp.status != "completed":
+            return {"reply": f"Analysis failed: {resp.error or 'unknown error'}"}
+        analysis = next((a.data for a in resp.artifacts if a.type == "analysis"), {})
+        return {"analysis": analysis, "reply": self._format_analysis(analysis)}
+
+    async def _handle_execute(
+        self, task_id: str, symbol: str, source: str, trade_type: str
+    ) -> dict[str, Any]:
+        logger.info("► AnalysisAgent (for execution)  symbol=%s", symbol)
+        a_resp = await self._analysis_agent.handle_task(Task(
+            task_id=f"a-{task_id}", agent="analysis_agent",
+            input={"symbol": symbol, "source": source, "trade_type": trade_type},
+        ))
+        analysis = {}
+        if a_resp.status == "completed":
+            analysis = next((a.data for a in a_resp.artifacts if a.type == "analysis"), {})
+
+        logger.info("► ExecutionAgent  symbol=%s  mode=%s", symbol, self._mode)
+        e_resp = await self._execution_agent.handle_task(Task(
+            task_id=f"e-{task_id}", agent="execution_agent",
+            input={"analysis": analysis, "source": source, "mode": self._mode},
+        ))
+        if e_resp.status != "completed":
+            return {"analysis": analysis,
+                    "reply": f"Execution failed: {e_resp.error or 'unknown error'}"}
+        execution = next((a.data for a in e_resp.artifacts if a.type == "execution"), {})
+        return {"analysis": analysis, "execution": execution,
+                "reply": self._format_execution(execution)}
+
+    async def _handle_research(
+        self, search_query: str, user_message: str, history: list[dict] | None
+    ) -> str:
+        logger.info("► Tavily MCP research  query=%s", search_query[:80])
+        raw = await call_mcp_tool("tavily", "search_market",
+                                  {"query": search_query, "max_results": 5})
+        data = json.loads(raw)
+        headlines = [r.get("title", "") for r in data.get("results", []) if r.get("title")]
+        answer    = data.get("answer", "")
+        logger.info("► Research done  sources=%d  answer_len=%d", len(headlines), len(answer))
+
+        web_ctx = ""
+        if answer:
+            web_ctx = f"Web search answer: {answer}\n\n"
+        if headlines:
+            web_ctx += "Recent sources:\n" + "\n".join(f"• {h}" for h in headlines[:5])
+
+        system = (
+            "You are a knowledgeable trading and finance assistant covering Indian equities "
+            "(NSE/BSE) and global crypto markets. Answer concisely and accurately.\n"
+            "Use the web search results below as your primary source. "
+            "Mention if data may be outdated."
+            f"\n\n--- WEB SEARCH RESULTS ---\n{web_ctx}\n---"
+        )
+        msgs = _build_chat_messages(system, history or [], user_message)
+        resp = await self.llm.ainvoke(msgs)
+        return resp.content
+
+    async def _handle_chat(self, user_message: str, history: list[dict] | None) -> str:
+        logger.info("► Chat response")
+        system = (
+            "You are a helpful trading assistant covering Indian equities (NSE/BSE) "
+            "and global crypto (Delta Exchange). Answer concisely."
+        )
+        msgs = _build_chat_messages(system, history or [], user_message)
+        resp = await self.llm.ainvoke(msgs)
+        return resp.content
 
     # ── Formatters ────────────────────────────────────────────────────────────
 
     def _format_analysis(self, a: dict) -> str:
         if not a:
             return "Could not generate analysis."
-        trend  = a.get("trend", "?").upper()
-        sym    = a.get("symbol", "?")
-        conf   = float(a.get("confidence", 0))
-        summ   = a.get("summary", "")
-        entry  = a.get("entry_zone", {})
-        sl     = a.get("stop_loss")
-        tgts   = a.get("targets", [])
-        rr     = a.get("rr_ratio", 0)
-        news   = a.get("news_context", "")
+        sym   = a.get("symbol", "?")
+        trend = a.get("trend", "?").upper()
+        conf  = float(a.get("confidence", 0))
+        summ  = a.get("summary", "")
+        entry = a.get("entry_zone", {})
+        sl    = a.get("stop_loss")
+        tgts  = a.get("targets", [])
+        rr    = a.get("rr_ratio", 0)
+        news  = a.get("news_context", "")
 
         lines = [
             f"**{sym} — {a.get('trade_type','').upper()} Analysis**",
@@ -251,7 +276,7 @@ class OrchestratorAgent:
             "",
             f"📰 *{news}*" if news and news != "No recent news" else "",
         ]
-        return "\n".join(l for l in lines if l is not None)
+        return "\n".join(ln for ln in lines if ln is not None)
 
     def _format_execution(self, e: dict) -> str:
         if not e:
@@ -262,22 +287,17 @@ class OrchestratorAgent:
         order  = e.get("order_result", {})
         status = order.get("status", "?")
 
-        lines = [
-            f"**{sym} — Execution Plan ({mode.upper()})**",
-            f"Action: **{action}**",
-            "",
-        ]
+        lines = [f"**{sym} — Execution Plan ({mode.upper()})**", f"Action: **{action}**", ""]
         if action in ("BUY", "SELL"):
             lines += [
                 f"Entry: **{e.get('entry')}**",
                 f"Stop Loss: **{e.get('stop_loss')}**",
                 f"Take Profit: **{e.get('take_profit')}**",
                 f"Qty: **{e.get('qty', 1)}**  |  R:R: **{e.get('rr_ratio', 0):.1f}:1**",
-                f"Risk: ₹{e.get('risk_amount', 0):,.0f}",
-                "",
+                f"Risk: ₹{e.get('risk_amount', 0):,.0f}", "",
             ]
             if mode == "paper":
-                lines.append(f"✅ *Paper trade simulated (Order ID: {order.get('order_id','?')})*")
+                lines.append(f"✅ *Paper trade (ID: {order.get('order_id','?')})*")
             elif status == "placed":
                 lines.append(f"✅ *Live order placed (ID: {order.get('order_id','?')})*")
             else:
@@ -285,4 +305,4 @@ class OrchestratorAgent:
         else:
             lines.append(f"⏸ Holding — {e.get('rationale', 'No trade recommended')}")
 
-        return "\n".join(l for l in lines if l is not None)
+        return "\n".join(ln for ln in lines if ln is not None)

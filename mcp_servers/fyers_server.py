@@ -46,7 +46,7 @@ except ImportError:
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _get_fyers_source():
-    from backend.agents.data_agent.sources.fyers_source import FyersSource
+    from backend.brokers.fyers.source import FyersSource
     from backend.config import settings
     return FyersSource(
         client_id=os.getenv("FYERS_CLIENT_ID", settings.FYERS_CLIENT_ID),

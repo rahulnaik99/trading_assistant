@@ -7,7 +7,7 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from backend.llm.factory import LLMFactory, traceable
+from backend.llm.factory import LLMFactory
 from backend.mcp.connector import call_mcp_tool
 from backend.protocol import Artifact, Task, TaskResponse
 
@@ -40,6 +40,59 @@ Respond ONLY with valid JSON matching this schema:
   "news_context": string
 }"""
 
+_AUTH_KEYWORDS = ("expired", "invalid", "auth", "token", "unauthorized", "403", "401")
+
+_INTERVAL_MAP = {
+    ("swing",    "5m"): "1h",
+    ("longterm", "5m"): "1D",
+    ("longterm", "1h"): "1D",
+}
+
+
+def _resolve_interval(trade_type: str, interval: str) -> str:
+    return _INTERVAL_MAP.get((trade_type, interval), interval)
+
+
+def _parse_json_response(raw: str, symbol: str) -> dict[str, Any]:
+    """Parse LLM JSON response with fallback to regex extraction."""
+    cleaned = re.sub(r"```json|```", "", raw).strip()
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+    m = re.search(r"\{.*\}", cleaned, re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group())
+        except Exception:
+            pass
+    return {"symbol": symbol, "summary": raw, "confidence": 0.5}
+
+
+def _build_prompt(
+    symbol: str, trade_type: str, interval: str,
+    candle_data: dict, market_extra: dict, news_context: str,
+) -> str:
+    recent = (candle_data.get("candles") or [])[-20:]
+    lines = [
+        f"Symbol: {symbol}  Trade type: {trade_type.upper()}  Interval: {interval}",
+        f"Last close: {candle_data.get('last_close', 'N/A')}",
+        f"Recent candles (last {len(recent)}): {json.dumps(recent[:5])} ... [{len(recent)} bars total]",
+    ]
+    if market_extra.get("funding_signal"):
+        lines += [
+            "",
+            "Perpetual metrics:",
+            f"  Funding: {market_extra.get('funding_rate_8h_pct','?')}%  "
+            f"Signal: {market_extra.get('funding_signal','?').upper()}",
+            f"  OI: {market_extra.get('oi','?')}  Mark: {market_extra.get('mark_price','?')}",
+        ]
+    if market_extra.get("ltp"):
+        lines.append(f"\nCurrent LTP: {market_extra['ltp']}")
+    lines += [f"\nNews context: {news_context}",
+               f"\nProduce {trade_type} trade analysis in the required JSON format."]
+    return "\n".join(lines)
+
 
 class AnalysisAgent:
     """Fetches data via MCP and calls LLM to produce trade analysis."""
@@ -57,103 +110,40 @@ class AnalysisAgent:
         return self._llm
 
     async def handle_task(self, task: Task) -> TaskResponse:
-        inp = task.input or {}
+        inp        = task.input or {}
         symbol     = inp.get("symbol", "BTCUSDT")
-        trade_type = inp.get("trade_type", "intraday")   # intraday | swing | longterm
-        source     = inp.get("source", "delta")          # delta | fyers
-        interval   = inp.get("interval", "5m")
-
-        # Map trade_type → sensible interval
-        if trade_type == "swing"    and interval == "5m":  interval = "1h"
-        if trade_type == "longterm" and interval in ("5m","1h"): interval = "1D"
+        trade_type = inp.get("trade_type", "intraday")
+        source     = inp.get("source", "delta")
+        interval   = _resolve_interval(trade_type, inp.get("interval", "5m"))
 
         logger.info("analysis_agent START  symbol=%s  type=%s  source=%s  interval=%s",
                     symbol, trade_type, source, interval)
 
-        # ── 1. Fetch candles via MCP ──────────────────────────────────────────
-        logger.info("► Fetching candles via %s MCP  symbol=%s  interval=%s", source, symbol, interval)
-        candles_json = await call_mcp_tool(
-            server=source,
-            tool="fetch_candles",
-            arguments={"symbol": symbol, "interval": interval, "lookback_days": 7},
-        )
-        candle_data = json.loads(candles_json)
+        # ── Fetch market data ─────────────────────────────────────────────────
+        candle_data, auth_err = await self._fetch_candles(symbol, source, interval)
+        if auth_err:
+            return TaskResponse(task_id=task.task_id, agent=self.agent_name,
+                                status="failed", error=auth_err)
 
-        # ── 2. Fetch perp metrics or quote ────────────────────────────────────
-        market_extra: dict = {}
-        if source == "delta":
-            logger.info("► Fetching perpetual metrics  symbol=%s", symbol)
-            metrics_json = await call_mcp_tool(
-                server="delta", tool="fetch_perpetual_metrics",
-                arguments={"symbol": symbol},
-            )
-            market_extra = json.loads(metrics_json)
-        elif source == "fyers":
-            logger.info("► Fetching quote  symbol=%s", symbol)
-            quote_json = await call_mcp_tool(
-                server="fyers", tool="get_quote",
-                arguments={"symbol": symbol},
-            )
-            market_extra = json.loads(quote_json)
+        market_extra = await self._fetch_market_extra(symbol, source)
+        news_context = await self._fetch_news(symbol)
 
-        # ── 3. News context ───────────────────────────────────────────────────
-        logger.info("► Fetching news  symbol=%s", symbol)
-        clean_sym = symbol.replace("NSE:", "").replace("-EQ", "").split("/")[0]
-        news_json = await call_mcp_tool(
-            server="tavily", tool="search_news",
-            arguments={"query": f"{clean_sym} stock analysis", "max_results": 3},
-        )
-        news_data = json.loads(news_json)
-        headlines = [r.get("title","") for r in news_data.get("results",[]) if r.get("title")]
-        news_context = " | ".join(headlines[:3]) or "No recent news"
-
-        # ── 4. Build LLM prompt ───────────────────────────────────────────────
-        recent = (candle_data.get("candles") or [])[-20:]
-        prompt = (
-            f"Symbol: {symbol}  Trade type: {trade_type.upper()}  Interval: {interval}\n"
-            f"Last close: {candle_data.get('last_close', 'N/A')}\n"
-            f"Recent candles (last {len(recent)}): {json.dumps(recent[:5])} ... "
-            f"[{len(recent)} bars total]\n"
-        )
-        if market_extra.get("funding_signal"):
-            prompt += (
-                f"\nPerpetual metrics:\n"
-                f"  Funding: {market_extra.get('funding_rate_8h_pct','?')}%  "
-                f"Signal: {market_extra.get('funding_signal','?').upper()}\n"
-                f"  OI: {market_extra.get('oi','?')}  Mark: {market_extra.get('mark_price','?')}\n"
-            )
-        if market_extra.get("ltp"):
-            prompt += f"\nCurrent LTP: {market_extra['ltp']}\n"
-        prompt += f"\nNews context: {news_context}\n"
-        prompt += f"\nProduce {trade_type} trade analysis in the required JSON format."
-
-        # ── 5. LLM analysis ───────────────────────────────────────────────────
-        logger.info("► Calling LLM for analysis  provider=%s", self._llm_provider or "default")
+        # ── Build prompt + call LLM ───────────────────────────────────────────
+        prompt = _build_prompt(symbol, trade_type, interval,
+                               candle_data, market_extra, news_context)
+        logger.info("► Calling LLM  provider=%s", self._llm_provider or "default")
         response = await self.llm.ainvoke([
             SystemMessage(content=_SYSTEM),
             HumanMessage(content=prompt),
         ])
-        raw = response.content.strip()
 
-        # Parse JSON
-        analysis: dict[str, Any] = {}
-        try:
-            cleaned = re.sub(r"```json|```", "", raw).strip()
-            analysis = json.loads(cleaned)
-        except json.JSONDecodeError:
-            m = re.search(r"\{.*\}", raw, re.DOTALL)
-            if m:
-                try:
-                    analysis = json.loads(m.group())
-                except Exception:
-                    pass
-            if not analysis:
-                analysis = {"symbol": symbol, "summary": raw, "confidence": 0.5}
-
-        analysis["symbol"]       = symbol
-        analysis["trade_type"]   = trade_type
-        analysis["news_context"] = news_context
-        analysis["raw_candles"]  = recent[:10]  # keep last 10 for execution agent
+        analysis = _parse_json_response(response.content.strip(), symbol)
+        analysis.update({
+            "symbol":       symbol,
+            "trade_type":   trade_type,
+            "news_context": news_context,
+            "raw_candles":  (candle_data.get("candles") or [])[-10:],
+        })
 
         logger.info("analysis_agent END  symbol=%s  trend=%s  confidence=%s",
                     symbol, analysis.get("trend"), analysis.get("confidence"))
@@ -162,3 +152,51 @@ class AnalysisAgent:
             task_id=task.task_id, agent=self.agent_name, status="completed",
             artifacts=[Artifact(type="analysis", data=analysis)],
         )
+
+    # ── Data-fetch helpers ────────────────────────────────────────────────────
+
+    async def _fetch_candles(
+        self, symbol: str, source: str, interval: str
+    ) -> tuple[dict, str | None]:
+        """Returns (candle_data, error_message_or_None)."""
+        logger.info("► Fetching candles  source=%s  symbol=%s  interval=%s",
+                    source, symbol, interval)
+        raw = await call_mcp_tool(
+            server=source, tool="fetch_candles",
+            arguments={"symbol": symbol, "interval": interval, "lookback_days": 7},
+        )
+        data = json.loads(raw)
+        if "error" in data:
+            err = data["error"]
+            if any(kw in err.lower() for kw in _AUTH_KEYWORDS):
+                return {}, (
+                    f"Authentication failed for {source.upper()}. "
+                    f"Please refresh your access token and update .env.\n"
+                    f"Details: {err}"
+                )
+            logger.warning("analysis_agent: candle fetch warning — %s", err)
+        return data, None
+
+    async def _fetch_market_extra(self, symbol: str, source: str) -> dict:
+        """Fetch perpetual metrics (delta) or LTP quote (fyers)."""
+        if source == "delta":
+            logger.info("► Fetching perpetual metrics  symbol=%s", symbol)
+            raw = await call_mcp_tool("delta", "fetch_perpetual_metrics",
+                                      {"symbol": symbol})
+        elif source == "fyers":
+            logger.info("► Fetching quote  symbol=%s", symbol)
+            raw = await call_mcp_tool("fyers", "get_quote", {"symbol": symbol})
+        else:
+            return {}
+        result = json.loads(raw)
+        return {} if "error" in result else result
+
+    async def _fetch_news(self, symbol: str) -> str:
+        """Fetch recent news headlines for the symbol."""
+        logger.info("► Fetching news  symbol=%s", symbol)
+        clean = symbol.replace("NSE:", "").replace("-EQ", "").split("/")[0]
+        raw = await call_mcp_tool("tavily", "search_news",
+                                  {"query": f"{clean} stock analysis", "max_results": 3})
+        data = json.loads(raw)
+        headlines = [r.get("title", "") for r in data.get("results", []) if r.get("title")]
+        return " | ".join(headlines[:3]) or "No recent news"
