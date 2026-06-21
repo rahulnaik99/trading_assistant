@@ -33,6 +33,9 @@ async def call_mcp_tool(server: str, tool: str, arguments: dict[str, Any] | None
     args = args_str.split(",") if args_str else []
 
     env = dict(os.environ)
+    # Ensure project root is on PYTHONPATH for MCP server subprocesses
+    project_root = str(__import__("pathlib").Path(__file__).resolve().parents[2])
+    env["PYTHONPATH"] = project_root + os.pathsep + env.get("PYTHONPATH", "")
     if server == "delta":
         env.update({
             "DELTA_API_KEY":    settings.DELTA_API_KEY,

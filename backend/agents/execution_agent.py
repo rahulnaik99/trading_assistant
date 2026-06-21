@@ -58,7 +58,6 @@ class ExecutionAgent:
             self._llm = LLMFactory.get_llm(self._llm_provider)
         return self._llm
 
-    @traceable(name="execution_agent.handle_task", run_type="chain")
     async def handle_task(self, task: Task) -> TaskResponse:
         inp = task.input or {}
         analysis: dict = inp.get("analysis", {})

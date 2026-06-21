@@ -56,7 +56,6 @@ class AnalysisAgent:
             self._llm = LLMFactory.get_llm(self._llm_provider)
         return self._llm
 
-    @traceable(name="analysis_agent.handle_task", run_type="chain")
     async def handle_task(self, task: Task) -> TaskResponse:
         inp = task.input or {}
         symbol     = inp.get("symbol", "BTCUSDT")

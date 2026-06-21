@@ -79,7 +79,6 @@ class OrchestratorAgent:
             self._llm = LLMFactory.get_llm(self._llm_provider)
         return self._llm
 
-    @traceable(name="orchestrator.handle_message", run_type="chain")
     async def handle_message(
         self,
         user_message: str,
