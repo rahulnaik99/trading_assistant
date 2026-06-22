@@ -147,7 +147,7 @@ async def test_analysis_agent():
     original_mcp = agent_mod.call_mcp_tool
     agent_mod.call_mcp_tool = _mock_mcp
 
-    agent = agent_mod.AnalysisAgent(llm_provider="openai")
+    agent = agent_mod.AnalysisAgent()
 
     class FakeLLM:
         async def ainvoke(self, _messages):
@@ -155,14 +155,17 @@ async def test_analysis_agent():
                 content = MOCK_ANALYSIS_LLM
             return R()
 
-    agent._llm = FakeLLM()
+    original_llm = agent_mod._get_llm
+    agent_mod._get_llm = lambda provider: FakeLLM()
 
     try:
         task = Task(task_id="test-a", agent="analysis_agent",
-                    input={"symbol": "BTCUSDT", "source": "delta", "trade_type": "intraday"})
+                    input={"symbol": "BTCUSDT", "source": "delta", "trade_type": "intraday",
+                           "llm_provider": "openai"})
         resp = await agent.handle_task(task)
     finally:
         agent_mod.call_mcp_tool = original_mcp
+        agent_mod._get_llm = original_llm
 
     assert resp.status == "completed"
     art = next(a for a in resp.artifacts if a.type == "analysis")
@@ -180,7 +183,7 @@ async def test_execution_agent():
     from backend.agents import execution_agent as exec_mod
     from backend.protocol import Task
 
-    agent = exec_mod.ExecutionAgent(llm_provider="openai", mode="paper")
+    agent = exec_mod.ExecutionAgent()
 
     class FakeLLM:
         async def ainvoke(self, _messages):
@@ -188,7 +191,8 @@ async def test_execution_agent():
                 content = MOCK_EXECUTION_LLM
             return R()
 
-    agent._llm = FakeLLM()
+    original_llm_exec = exec_mod._get_llm
+    exec_mod._get_llm = lambda provider: FakeLLM()
 
     analysis = {
         "symbol": "BTCUSDT", "trend": "bullish", "confidence": 0.72,
@@ -198,7 +202,10 @@ async def test_execution_agent():
     }
     task = Task(task_id="test-e", agent="execution_agent",
                 input={"analysis": analysis, "source": "delta", "mode": "paper"})
-    resp = await agent.handle_task(task)
+    try:
+        resp = await agent.handle_task(task)
+    finally:
+        exec_mod._get_llm = original_llm_exec
 
     assert resp.status == "completed"
     art = next(a for a in resp.artifacts if a.type == "execution")

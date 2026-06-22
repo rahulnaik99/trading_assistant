@@ -1,4 +1,11 @@
-"""Main Orchestrator Agent — routes user queries to Analysis or Execution agents via A2A HTTP."""
+"""Main Orchestrator Agent — routes user queries to Analysis or Execution agents via A2A HTTP.
+
+Decoupled:
+  - Does NOT import AnalysisAgent or ExecutionAgent (calls them via A2AClient over HTTP)
+  - Does NOT import LLMFactory at top level (lazy-loaded in _get_llm)
+  - Does NOT call MCP tools directly (delegates all data fetching to AnalysisAgent)
+  - Research (web search) is the ONLY MCP call the orchestrator makes — it owns the chat UX
+"""
 
 import json
 import logging
@@ -10,7 +17,6 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from backend.a2a.client import A2AClient
 from backend.config import settings
-from backend.llm.factory import LLMFactory
 from backend.mcp.connector import call_mcp_tool
 from backend.protocol import Task
 
@@ -45,20 +51,21 @@ _FYERS_MAP: dict[str, str] = {
     "icicibank": "NSE:ICICIBANK-EQ", "axisbank": "NSE:AXISBANK-EQ",
     "kotak": "NSE:KOTAKBANK-EQ", "kotakbank": "NSE:KOTAKBANK-EQ",
     # Public sector banks
-    "canara": "NSE:CANBK-EQ", "canarabank": "NSE:CANBK-EQ", "canbk": "NSE:CANBK-EQ",
-    "pnb": "NSE:PNB-EQ", "punjabnational": "NSE:PNB-EQ",
-    "bankbaroda": "NSE:BANKBARODA-EQ", "bob": "NSE:BANKBARODA-EQ",
+    **dict.fromkeys(["canara", "canarabank", "canbk"], "NSE:CANBK-EQ"),
+    **dict.fromkeys(["pnb", "punjabnational"], "NSE:PNB-EQ"),
+    **dict.fromkeys(["bankbaroda", "bob"], "NSE:BANKBARODA-EQ"),
     "unionbank": "NSE:UNIONBANK-EQ", "indianbank": "NSE:INDIANB-EQ",
-    "boi": "NSE:BANKINDIA-EQ", "bankindia": "NSE:BANKINDIA-EQ",
+    **dict.fromkeys(["boi", "bankindia"], "NSE:BANKINDIA-EQ"),
     # Large caps
     "tatamotors": "NSE:TATAMOTORS-EQ", "tatasteel": "NSE:TATASTEEL-EQ",
     "maruti": "NSE:MARUTI-EQ", "bajajfinance": "NSE:BAJFINANCE-EQ",
-    "bajajfinserv": "NSE:BAJAJFINSV-EQ", "hul": "NSE:HINDUNILVR-EQ",
-    "hindunilvr": "NSE:HINDUNILVR-EQ", "asianpaint": "NSE:ASIANPAINT-EQ",
-    "sunpharma": "NSE:SUNPHARMA-EQ", "drreddy": "NSE:DRREDDY-EQ",
-    "ongc": "NSE:ONGC-EQ", "ntpc": "NSE:NTPC-EQ",
-    "powergrid": "NSE:POWERGRID-EQ", "adaniports": "NSE:ADANIPORTS-EQ",
-    "adanient": "NSE:ADANIENT-EQ", "lt": "NSE:LT-EQ", "larsen": "NSE:LT-EQ",
+    "bajajfinserv": "NSE:BAJAJFINSV-EQ",
+    **dict.fromkeys(["hul", "hindunilvr"], "NSE:HINDUNILVR-EQ"),
+    "asianpaint": "NSE:ASIANPAINT-EQ", "sunpharma": "NSE:SUNPHARMA-EQ",
+    "drreddy": "NSE:DRREDDY-EQ", "ongc": "NSE:ONGC-EQ",
+    "ntpc": "NSE:NTPC-EQ", "powergrid": "NSE:POWERGRID-EQ",
+    "adaniports": "NSE:ADANIPORTS-EQ", "adanient": "NSE:ADANIENT-EQ",
+    **dict.fromkeys(["lt", "larsen"], "NSE:LT-EQ"),
     "rblbank": "NSE:RBLBANK-EQ", "idbi": "NSE:IDBI-EQ",
 }
 _DELTA_MAP: dict[str, str] = {
@@ -133,6 +140,7 @@ class OrchestratorAgent:
     @property
     def llm(self):
         if self._llm is None:
+            from backend.llm.factory import LLMFactory  # lazy import
             self._llm = LLMFactory.get_llm(self._llm_provider)
         return self._llm
 
@@ -188,7 +196,7 @@ class OrchestratorAgent:
                     settings.ANALYSIS_AGENT_URL, symbol, source, trade_type)
         resp = await self._analysis_client.send(
             agent="analysis_agent",
-            input_data={"symbol": symbol, "source": source, "trade_type": trade_type},
+            input_data={"symbol": symbol, "source": source, "trade_type": trade_type, "llm_provider": self._llm_provider},
             task_id=f"a-{task_id}",
         )
         if resp.status != "completed":
@@ -207,7 +215,7 @@ class OrchestratorAgent:
         logger.info("► A2A → AnalysisAgent (for execution)  symbol=%s", symbol)
         a_resp = await self._analysis_client.send(
             agent="analysis_agent",
-            input_data={"symbol": symbol, "source": source, "trade_type": trade_type},
+            input_data={"symbol": symbol, "source": source, "trade_type": trade_type, "llm_provider": self._llm_provider},
             task_id=f"a-{task_id}",
         )
         analysis = {}
@@ -220,7 +228,7 @@ class OrchestratorAgent:
                     settings.EXECUTION_AGENT_URL, symbol, self._mode)
         e_resp = await self._execution_client.send(
             agent="execution_agent",
-            input_data={"analysis": analysis, "source": source, "mode": self._mode},
+            input_data={"analysis": analysis, "source": source, "mode": self._mode, "llm_provider": self._llm_provider},
             task_id=f"e-{task_id}",
         )
         if e_resp.status != "completed":

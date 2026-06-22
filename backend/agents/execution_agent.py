@@ -1,4 +1,10 @@
-"""Execution Agent — builds an execution plan and places orders via MCP."""
+"""Execution Agent — builds an execution plan and places orders via MCP.
+
+Fully decoupled:
+  - LLM provider injected via task.input["llm_provider"]
+  - Mode (paper/real) injected via task.input["mode"]
+  - No direct import of settings / config
+"""
 
 import json
 import logging
@@ -7,7 +13,6 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from backend.llm.factory import LLMFactory, traceable
 from backend.mcp.connector import call_mcp_tool
 from backend.protocol import Artifact, Task, TaskResponse
 
@@ -18,9 +23,9 @@ _SYSTEM = """You are a professional trade execution specialist focused on minimu
 Given a trade analysis, produce a precise execution plan with concrete order parameters.
 
 Rules:
-1. Risk per trade ≤ 1% of account (assume ₹100,000 / $1,000 account)
+1. Risk per trade <= 1% of account (assume 100,000 INR / $1,000 account)
 2. Always use bracket orders (entry + stop-loss + take-profit)
-3. R:R must be ≥ 1.5:1
+3. R:R must be >= 1.5:1
 4. Use market order for entry unless analysis says otherwise
 5. For intraday: exit before market close
 
@@ -42,37 +47,82 @@ Respond ONLY with valid JSON:
 }"""
 
 
+def _get_llm(provider: str):
+    """Lazy-import to keep execution_agent decoupled at module level."""
+    from backend.llm.factory import LLMFactory
+    return LLMFactory.get_llm(provider or "openai")
+
+
+def _parse_plan(raw: str, symbol: str) -> dict[str, Any]:
+    cleaned = re.sub(r"```json|```", "", raw).strip()
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+    m = re.search(r"\{.*\}", cleaned, re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group())
+        except Exception:
+            pass
+    return {"action": "hold", "rationale": "Could not parse plan", "symbol": symbol}
+
+
 class ExecutionAgent:
-    """Plans and executes trades using analysis from AnalysisAgent."""
+    """Plans and executes trades.
+
+    LLM provider and trade mode are resolved from task.input at call time,
+    keeping this module independent of settings/config.
+    """
 
     agent_name = "execution_agent"
 
-    def __init__(self, llm_provider: str = "", mode: str = "paper") -> None:
-        self._llm_provider = llm_provider
-        self._mode = mode
-        self._llm = None
-
-    @property
-    def llm(self):
-        if self._llm is None:
-            self._llm = LLMFactory.get_llm(self._llm_provider)
-        return self._llm
-
     async def handle_task(self, task: Task) -> TaskResponse:
-        inp = task.input or {}
-        analysis: dict = inp.get("analysis", {})
-        source: str    = inp.get("source", "delta")
-        mode: str      = inp.get("mode", self._mode)
+        inp          = task.input or {}
+        analysis     = inp.get("analysis", {})
+        source       = inp.get("source", "delta")
+        mode         = inp.get("mode", "paper")
+        llm_provider = inp.get("llm_provider", "openai")
+        symbol       = analysis.get("symbol", inp.get("symbol", "BTCUSDT"))
+        confidence   = float(analysis.get("confidence", 0))
 
-        symbol    = analysis.get("symbol", inp.get("symbol", "BTCUSDT"))
-        trend     = analysis.get("trend", "sideways")
-        confidence= float(analysis.get("confidence", 0))
+        logger.info("execution_agent START  symbol=%s  conf=%.2f  mode=%s  llm=%s",
+                    symbol, confidence, mode, llm_provider)
 
-        logger.info("execution_agent START  symbol=%s  trend=%s  confidence=%.2f  mode=%s",
-                    symbol, trend, confidence, mode)
+        plan         = await self._build_plan(analysis, source, mode, llm_provider)
+        plan["mode"] = mode
+        plan["symbol"] = symbol
+        action       = str(plan.get("action", "hold")).lower()
 
-        # ── 1. Build execution plan via LLM ──────────────────────────────────
-        prompt = (
+        logger.info("execution_agent: action=%s  entry=%s  sl=%s  tp=%s",
+                    action, plan.get("entry"), plan.get("stop_loss"), plan.get("take_profit"))
+
+        order_result = await self._execute(plan, symbol, source, action, mode, task.task_id)
+        result       = {**plan, "order_result": order_result, "analysis_used": analysis}
+
+        return TaskResponse(
+            task_id=task.task_id, agent=self.agent_name, status="completed",
+            artifacts=[Artifact(type="execution", data=result)],
+        )
+
+    async def _build_plan(
+        self, analysis: dict, source: str, mode: str, llm_provider: str
+    ) -> dict[str, Any]:
+        """Call LLM to produce an execution plan from the analysis."""
+        symbol = analysis.get("symbol", "BTCUSDT")
+        prompt = self._build_prompt(symbol, analysis, source, mode)
+        logger.info("► Calling LLM for execution plan  provider=%s", llm_provider)
+        llm      = _get_llm(llm_provider)
+        response = await llm.ainvoke([
+            SystemMessage(content=_SYSTEM),
+            HumanMessage(content=prompt),
+        ])
+        return _parse_plan(response.content.strip(), symbol)
+
+    def _build_prompt(self, symbol: str, analysis: dict, source: str, mode: str) -> str:
+        confidence = float(analysis.get("confidence", 0))
+        trend      = analysis.get("trend", "sideways")
+        return (
             f"Symbol: {symbol}\n"
             f"Trend: {trend.upper()}  Confidence: {confidence:.0%}\n"
             f"Trade type: {analysis.get('trade_type','intraday')}\n"
@@ -88,77 +138,40 @@ class ExecutionAgent:
             f"or trend is sideways."
         )
 
-        logger.info("► Calling LLM for execution plan  symbol=%s", symbol)
-        response = await self.llm.ainvoke([
-            SystemMessage(content=_SYSTEM),
-            HumanMessage(content=prompt),
-        ])
-        raw = response.content.strip()
+    async def _execute(
+        self, plan: dict, symbol: str, source: str, action: str, mode: str, task_id: str
+    ) -> dict:
+        if action not in ("buy", "sell"):
+            return {"status": "hold", "reason": plan.get("rationale", "No trade")}
 
-        plan: dict[str, Any] = {}
-        try:
-            cleaned = re.sub(r"```json|```", "", raw).strip()
-            plan = json.loads(cleaned)
-        except json.JSONDecodeError:
-            m = re.search(r"\{.*\}", raw, re.DOTALL)
-            if m:
-                try:
-                    plan = json.loads(m.group())
-                except Exception:
-                    pass
-            if not plan:
-                plan = {"action": "hold", "rationale": "Could not parse plan", "symbol": symbol}
-
-        plan["mode"] = mode
-        plan["symbol"] = symbol
-
-        action = str(plan.get("action", "hold")).lower()
-        logger.info("execution_agent: plan  action=%s  entry=%s  sl=%s  tp=%s",
-                    action, plan.get("entry"), plan.get("stop_loss"), plan.get("take_profit"))
-
-        # ── 2. Execute via MCP if action is buy/sell and mode is real ─────────
-        order_result: dict = {}
-        if action in ("buy", "sell") and mode == "real":
-            entry      = float(plan.get("entry", 0))
-            stop_loss  = float(plan.get("stop_loss", 0))
-            take_profit= float(plan.get("take_profit", 0))
-            qty        = int(plan.get("qty", 1))
-
-            if entry and stop_loss and take_profit:
-                logger.info("► Placing REAL order via %s MCP  symbol=%s  side=%s  qty=%d",
-                            source, symbol, action, qty)
-                order_json = await call_mcp_tool(
-                    server=source,
-                    tool="place_order",
-                    arguments={
-                        "symbol": symbol, "side": action, "qty": qty,
-                        "entry": entry, "stop_loss": stop_loss, "take_profit": take_profit,
-                    },
-                )
-                order_result = json.loads(order_json)
-                logger.info("► Order result: %s", order_result)
-            else:
-                logger.warning("execution_agent: incomplete levels — order skipped")
-                order_result = {"status": "skipped", "reason": "Incomplete entry/SL/TP levels"}
-
-        elif action in ("buy", "sell") and mode == "paper":
-            order_result = {
+        if mode == "paper":
+            logger.info("► Paper trade simulated  symbol=%s  side=%s", symbol, action)
+            return {
                 "status": "paper_filled",
-                "order_id": f"PAPER-{task.task_id}",
+                "order_id": f"PAPER-{task_id}",
                 "symbol": symbol, "side": action,
                 "entry": plan.get("entry"),
                 "stop_loss": plan.get("stop_loss"),
                 "take_profit": plan.get("take_profit"),
                 "qty": plan.get("qty", 1),
             }
-            logger.info("► Paper trade simulated  symbol=%s  side=%s", symbol, action)
 
-        else:
-            order_result = {"status": "hold", "reason": plan.get("rationale", "No trade")}
+        # Real order via MCP
+        entry       = float(plan.get("entry", 0))
+        stop_loss   = float(plan.get("stop_loss", 0))
+        take_profit = float(plan.get("take_profit", 0))
+        qty         = int(plan.get("qty", 1))
 
-        result = {**plan, "order_result": order_result, "analysis_used": analysis}
+        if not (entry and stop_loss and take_profit):
+            logger.warning("execution_agent: incomplete levels — order skipped")
+            return {"status": "skipped", "reason": "Incomplete entry/SL/TP levels"}
 
-        return TaskResponse(
-            task_id=task.task_id, agent=self.agent_name, status="completed",
-            artifacts=[Artifact(type="execution", data=result)],
-        )
+        logger.info("► Placing REAL order via %s MCP  symbol=%s  side=%s  qty=%d",
+                    source, symbol, action, qty)
+        order_json = await call_mcp_tool(source, "place_order", {
+            "symbol": symbol, "side": action, "qty": qty,
+            "entry": entry, "stop_loss": stop_loss, "take_profit": take_profit,
+        })
+        result = json.loads(order_json)
+        logger.info("► Order result: %s", result)
+        return result
