@@ -139,8 +139,12 @@ async def get_messages(session_id: str, user: dict = Depends(current_user)):
 @app.post("/chat", tags=["chat"])
 async def chat(req: ChatRequest, user: dict = Depends(current_user)):
     """Main chat endpoint — routes to analysis/execution agents as needed."""
-    logger.info("chat: user=%s  session=%s  msg=%s",
-                user.get("username"), req.session_id, req.message[:60])
+    logger.info("chat: user=%s  session=%s  provider=%s  mode=%s  msg=%s",
+                user.get("username"), req.session_id,
+                req.llm_provider, req.trade_mode, req.message[:60])
+    logger.info("chat: OPENAI_API_KEY set=%s  key_prefix=%s",
+                bool(settings.OPENAI_API_KEY),
+                settings.OPENAI_API_KEY[:12] + "..." if settings.OPENAI_API_KEY else "EMPTY")
 
     # Load conversation history for context
     history = load_messages(req.session_id)
