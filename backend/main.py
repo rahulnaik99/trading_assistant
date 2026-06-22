@@ -193,6 +193,142 @@ async def health():
     return {"status": "ok", "version": "1.0.0"}
 
 
+# ── Fyers token management ────────────────────────────────────────────────────
+
+@app.get("/fyers/login-url", tags=["fyers"])
+async def fyers_login_url():
+    """Get the Fyers OAuth login URL. Open it in browser to get auth code."""
+    redirect = "https://www.google.com"
+    url = (
+        f"https://api.fyers.in/api/v2/generate-authcode"
+        f"?client_id={settings.FYERS_CLIENT_ID}"
+        f"&redirect_uri={redirect}"
+        f"&response_type=code"
+        f"&state=trade_assistant"
+    )
+    return {
+        "login_url":   url,
+        "client_id":   settings.FYERS_CLIENT_ID,
+        "redirect_uri": redirect,
+        "instructions": [
+            "1. Open the login_url in your browser",
+            "2. Login with your Fyers credentials",
+            "3. After redirect, copy the 'code' parameter from the URL",
+            "4. POST to /fyers/generate-token with {auth_code: 'your-code'}",
+        ],
+    }
+
+
+class FyersTokenRequest(BaseModel):
+    auth_code: str = ""
+    model_config = {
+        "json_schema_extra": {
+            "example": {"auth_code": "paste-the-code-from-redirect-url-here"}
+        }
+    }
+
+
+@app.post("/fyers/generate-token", tags=["fyers"])
+async def fyers_generate_token(req: FyersTokenRequest):
+    """Exchange Fyers auth code for access token and update .env automatically."""
+    import hashlib
+    import requests as _req
+
+    if not req.auth_code:
+        raise HTTPException(422, "auth_code is required")
+
+    app_secret = settings.FYERS_SECRET_KEY
+    if not app_secret:
+        raise HTTPException(400,
+            "FYERS_SECRET_KEY not set in .env — add it to generate tokens")
+
+    # Build checksum: SHA256(client_id:secret_key:auth_code)
+    checksum_str = f"{settings.FYERS_CLIENT_ID}:{app_secret}:{req.auth_code}"
+    checksum = hashlib.sha256(checksum_str.encode()).hexdigest()
+
+    payload = {
+        "grant_type":  "authorization_code",
+        "appIdHash":   checksum,
+        "code":        req.auth_code,
+    }
+    resp = _req.post(
+        "https://api-t2.fyers.in/api/v3/token",
+        json=payload,
+        headers={"Content-Type": "application/json"},
+        timeout=15,
+    )
+    data = resp.json()
+    logger.info("fyers_generate_token: response s=%s  code=%s", data.get("s"), data.get("code"))
+
+    if data.get("s") != "ok":
+        raise HTTPException(400, f"Fyers token generation failed: {data.get('message', data)}")
+
+    access_token = data.get("access_token", "")
+    if not access_token:
+        raise HTTPException(400, f"No access_token in response: {data}")
+
+    # Auto-update .env file
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    if env_path.exists():
+        env_txt = env_path.read_text(encoding="utf-8")
+        import re as _re
+        env_txt = _re.sub(
+            r"FYERS_ACCESS_TOKEN=.*",
+            f"FYERS_ACCESS_TOKEN={access_token}",
+            env_txt,
+        )
+        if "FYERS_ACCESS_TOKEN=" not in env_txt:
+            env_txt += f"\nFYERS_ACCESS_TOKEN={access_token}\n"
+        env_path.write_text(env_txt, encoding="utf-8")
+        logger.info("fyers_generate_token: .env updated with new access_token")
+
+    # Also update live settings so current process uses new token immediately
+    settings.FYERS_ACCESS_TOKEN = access_token
+
+    return {
+        "status":         "ok",
+        "message":        ".env updated. Restart services to apply everywhere.",
+        "token_preview":  access_token[:20] + "...",
+        "token_length":   len(access_token),
+    }
+
+
+@app.get("/fyers/auth-status", tags=["fyers"])
+async def fyers_auth_status():
+    """Check if current Fyers access token is valid."""
+    import base64, json as _json
+    token = settings.FYERS_ACCESS_TOKEN
+    if not token:
+        return {"authenticated": False, "reason": "FYERS_ACCESS_TOKEN not set in .env"}
+
+    # Decode JWT expiry without network call
+    try:
+        parts = token.split(".")
+        if len(parts) == 3:
+            payload_b64 = parts[1] + "=" * (4 - len(parts[1]) % 4)
+            payload = _json.loads(base64.b64decode(payload_b64))
+            from datetime import datetime, timezone
+            exp = payload.get("exp", 0)
+            exp_dt = datetime.fromtimestamp(exp, tz=timezone.utc)
+            now    = datetime.now(timezone.utc)
+            expired = now > exp_dt
+            return {
+                "authenticated": not expired,
+                "fy_id":         payload.get("fy_id", "?"),
+                "expires_at":    exp_dt.strftime("%Y-%m-%d %H:%M UTC"),
+                "expired":       expired,
+                "reason":        "Token expired" if expired else "Token valid",
+            }
+    except Exception as exc:
+        logger.warning("fyers_auth_status: JWT decode failed — %s", exc)
+
+    # Fallback: live API check
+    from backend.brokers.fyers.source import FyersSource
+    fs = FyersSource(client_id=settings.FYERS_CLIENT_ID, access_token=token)
+    is_auth, msg = fs.check_auth()
+    return {"authenticated": is_auth, "reason": msg}
+
+
 @app.get("/logs/download", tags=["meta"], response_model=None)
 async def download_logs(user: dict = Depends(current_user)):
     from fastapi.responses import FileResponse
