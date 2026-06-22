@@ -1,4 +1,4 @@
-"""Main Orchestrator Agent — routes user queries to Analysis or Execution agents."""
+"""Main Orchestrator Agent — routes user queries to Analysis or Execution agents via A2A HTTP."""
 
 import json
 import logging
@@ -8,9 +8,9 @@ from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-from backend.agents.analysis_agent import AnalysisAgent
-from backend.agents.execution_agent import ExecutionAgent
-from backend.llm.factory import LLMFactory, traceable
+from backend.a2a.client import A2AClient
+from backend.config import settings
+from backend.llm.factory import LLMFactory
 from backend.mcp.connector import call_mcp_tool
 from backend.protocol import Task
 
@@ -112,15 +112,23 @@ def _build_chat_messages(
 # ── Orchestrator ───────────────────────────────────────────────────────────────
 
 class OrchestratorAgent:
-    """Entry point — routes user messages to Analysis, Execution, Research, or Chat."""
+    """Entry point — routes user messages to Analysis, Execution, Research, or Chat.
+
+    Analysis and Execution agents are called via A2A HTTP (separate processes):
+      Analysis  → POST http://localhost:8101/a2a/task
+      Execution → POST http://localhost:8102/a2a/task
+    """
 
     def __init__(self, llm_provider: str = "openai", mode: str = "paper") -> None:
         self._llm_provider = llm_provider
         self._mode = mode
-        self._analysis_agent = AnalysisAgent(llm_provider)
-        self._execution_agent = ExecutionAgent(llm_provider, mode)
+        self._analysis_client  = A2AClient(settings.ANALYSIS_AGENT_URL)
+        self._execution_client = A2AClient(settings.EXECUTION_AGENT_URL)
         self._llm = None
-        logger.info("OrchestratorAgent init  provider=%s  mode=%s", llm_provider, mode)
+        logger.info("OrchestratorAgent init  provider=%s  mode=%s  "
+                    "analysis_url=%s  execution_url=%s",
+                    llm_provider, mode,
+                    settings.ANALYSIS_AGENT_URL, settings.EXECUTION_AGENT_URL)
 
     @property
     def llm(self):
@@ -176,37 +184,52 @@ class OrchestratorAgent:
     async def _handle_analyse(
         self, task_id: str, symbol: str, source: str, trade_type: str
     ) -> dict[str, Any]:
-        logger.info("► AnalysisAgent  symbol=%s  source=%s  type=%s", symbol, source, trade_type)
-        resp = await self._analysis_agent.handle_task(Task(
-            task_id=f"a-{task_id}", agent="analysis_agent",
-            input={"symbol": symbol, "source": source, "trade_type": trade_type},
-        ))
+        logger.info("► A2A → AnalysisAgent  url=%s  symbol=%s  source=%s  type=%s",
+                    settings.ANALYSIS_AGENT_URL, symbol, source, trade_type)
+        resp = await self._analysis_client.send(
+            agent="analysis_agent",
+            input_data={"symbol": symbol, "source": source, "trade_type": trade_type},
+            task_id=f"a-{task_id}",
+        )
         if resp.status != "completed":
-            return {"reply": f"Analysis failed: {resp.error or 'unknown error'}"}
+            err = resp.error or "unknown error"
+            logger.error("A2A AnalysisAgent failed  task_id=%s  error=%s", task_id, err)
+            return {"reply": f"Analysis failed: {err}"}
         analysis = next((a.data for a in resp.artifacts if a.type == "analysis"), {})
+        logger.info("A2A AnalysisAgent done  trend=%s  conf=%s",
+                    analysis.get("trend"), analysis.get("confidence"))
         return {"analysis": analysis, "reply": self._format_analysis(analysis)}
 
     async def _handle_execute(
         self, task_id: str, symbol: str, source: str, trade_type: str
     ) -> dict[str, Any]:
-        logger.info("► AnalysisAgent (for execution)  symbol=%s", symbol)
-        a_resp = await self._analysis_agent.handle_task(Task(
-            task_id=f"a-{task_id}", agent="analysis_agent",
-            input={"symbol": symbol, "source": source, "trade_type": trade_type},
-        ))
+        # Step 1: get fresh analysis via A2A
+        logger.info("► A2A → AnalysisAgent (for execution)  symbol=%s", symbol)
+        a_resp = await self._analysis_client.send(
+            agent="analysis_agent",
+            input_data={"symbol": symbol, "source": source, "trade_type": trade_type},
+            task_id=f"a-{task_id}",
+        )
         analysis = {}
         if a_resp.status == "completed":
             analysis = next((a.data for a in a_resp.artifacts if a.type == "analysis"), {})
+            logger.info("A2A Analysis done  trend=%s", analysis.get("trend"))
 
-        logger.info("► ExecutionAgent  symbol=%s  mode=%s", symbol, self._mode)
-        e_resp = await self._execution_agent.handle_task(Task(
-            task_id=f"e-{task_id}", agent="execution_agent",
-            input={"analysis": analysis, "source": source, "mode": self._mode},
-        ))
+        # Step 2: execute via A2A
+        logger.info("► A2A → ExecutionAgent  url=%s  symbol=%s  mode=%s",
+                    settings.EXECUTION_AGENT_URL, symbol, self._mode)
+        e_resp = await self._execution_client.send(
+            agent="execution_agent",
+            input_data={"analysis": analysis, "source": source, "mode": self._mode},
+            task_id=f"e-{task_id}",
+        )
         if e_resp.status != "completed":
+            err = e_resp.error or "unknown error"
+            logger.error("A2A ExecutionAgent failed  task_id=%s  error=%s", task_id, err)
             return {"analysis": analysis,
-                    "reply": f"Execution failed: {e_resp.error or 'unknown error'}"}
+                    "reply": f"Execution failed: {err}"}
         execution = next((a.data for a in e_resp.artifacts if a.type == "execution"), {})
+        logger.info("A2A ExecutionAgent done  action=%s", execution.get("action"))
         return {"analysis": analysis, "execution": execution,
                 "reply": self._format_execution(execution)}
 

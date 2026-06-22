@@ -210,17 +210,15 @@ async def test_execution_agent():
 # ── Test 8: Orchestrator — analyse intent routing ─────────────────────────────
 
 @pytest.mark.asyncio
+@pytest.mark.asyncio
 async def test_orchestrator_analyse():
-    """Test OrchestratorAgent intent routing with fake LLMs."""
+    """Test OrchestratorAgent intent routing — A2A calls mocked at client level."""
     from backend.agents import orchestrator as orch_mod
-    from backend.agents import analysis_agent as agent_mod
-
-    # Patch MCP in agent module namespace
-    original_mcp = agent_mod.call_mcp_tool
-    agent_mod.call_mcp_tool = _mock_mcp
+    from backend.protocol import Artifact, TaskResponse
+    import json
 
     orch = orch_mod.OrchestratorAgent(llm_provider="openai", mode="paper")
-    router_json = '{"intent":"analyse","symbol":"BTCUSDT","source":"delta","trade_type":"intraday"}'
+    router_json = '{"intent":"analyse","symbol":"BTCUSDT","source":"delta","trade_type":"intraday","search_query":""}'
 
     class FakeOrcLLM:
         async def ainvoke(self, _messages):
@@ -228,23 +226,30 @@ async def test_orchestrator_analyse():
                 content = router_json
             return R()
 
-    class FakeAnalysisLLM:
-        async def ainvoke(self, _messages):
-            class R:
-                content = MOCK_ANALYSIS_LLM
-            return R()
+    # Mock the A2A analysis client — returns a pre-built TaskResponse over "HTTP"
+    analysis_data = json.loads(MOCK_ANALYSIS_LLM)
+    fake_a2a_resp = TaskResponse(
+        task_id="a-test", agent="analysis_agent", status="completed",
+        artifacts=[Artifact(type="analysis", data=analysis_data)],
+    )
+
+    class FakeAnalysisClient:
+        async def send(self, agent, input_data, task_id=""):
+            return fake_a2a_resp
+        async def health(self):
+            return True
 
     orch._llm = FakeOrcLLM()
-    orch._analysis_agent._llm = FakeAnalysisLLM()
+    orch._analysis_client = FakeAnalysisClient()
 
-    try:
-        result = await orch.handle_message("Analyse BTCUSDT for intraday trade")
-    finally:
-        agent_mod.call_mcp_tool = original_mcp
+    result = await orch.handle_message("Analyse BTCUSDT for intraday trade")
 
     assert result["intent"] == "analyse"
     assert result["symbol"] == "BTCUSDT"
     assert result["analysis"] is not None
+    assert result["analysis"]["trend"] == "bullish"
+    assert "bullish" in result["reply"].lower() or "BTCUSDT" in result["reply"]
+    print("TEST 8 PASS: Orchestrator A2A → AnalysisAgent reply with bullish analysis")
     assert "bullish" in result["reply"].lower() or "BTCUSDT" in result["reply"]
     print("TEST 8 PASS: Orchestrator routed to analyse, got structured reply")
 

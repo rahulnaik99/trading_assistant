@@ -45,5 +45,9 @@ class Settings(BaseSettings):
     # API
     API_PORT: int = 8100
 
+    # A2A Agent service URLs
+    ANALYSIS_AGENT_URL:  str = "http://localhost:8101"
+    EXECUTION_AGENT_URL: str = "http://localhost:8102"
+
 
 settings = Settings()
