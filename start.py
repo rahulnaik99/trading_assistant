@@ -19,12 +19,7 @@ SERVICES = {
     "backend": {
         "cmd":   [sys.executable, "-m", "uvicorn", "backend.main:app",
                   "--host", "0.0.0.0", "--port", "8100", "--reload"],
-        "label": "FastAPI Gateway      :8100",
-    },
-    "frontend": {
-        "cmd":   [sys.executable, "-m", "streamlit", "run", "frontend/app.py",
-                  "--server.port", "8501", "--server.headless", "true"],
-        "label": "Streamlit UI         :8501",
+        "label": "FastAPI + UI         :8100",
     },
 }
 
@@ -35,7 +30,7 @@ for name, svc in SERVICES.items():
     time.sleep(1.5)
 
 print("\n  Trade Assistant running:")
-print("  Dashboard  → http://localhost:8501")
+print("  Dashboard  → http://localhost:8100")
 print("  API docs   → http://localhost:8100/docs")
 print("  Analysis   → http://localhost:8101/.well-known/agent.json")
 print("  Execution  → http://localhost:8102/.well-known/agent.json")

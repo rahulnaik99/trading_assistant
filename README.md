@@ -17,7 +17,7 @@ python start.py
 
 | URL | What opens |
 |---|---|
-| http://localhost:8501 | Chat UI |
+| http://localhost:8100 | Dashboard (HTML frontend) |
 | http://localhost:8100/docs | Swagger API docs |
 
 ---
@@ -30,11 +30,10 @@ python start.py
 python start.py
 ```
 
-Starts 4 services in order:
+Starts 3 services in order:
 1. **Analysis Agent** → `:8101`
 2. **Execution Agent** → `:8102`
-3. **FastAPI Gateway** → `:8100`
-4. **Streamlit UI** → `:8501`
+3. **FastAPI + HTML UI** → `:8100`
 
 ### Manual (separate terminals)
 
@@ -45,11 +44,9 @@ python -m services.analysis_agent_service --port 8101
 # Terminal 2 — Execution Agent (A2A service, port 8102)
 python -m services.execution_agent_service --port 8102
 
-# Terminal 3 — FastAPI Gateway (port 8100)
+# Terminal 3 — FastAPI + HTML UI (port 8100)
 uvicorn backend.main:app --host 0.0.0.0 --port 8100 --reload
-
-# Terminal 4 — Streamlit Chat UI (port 8501)
-streamlit run frontend/app.py --server.port 8501
+# Open http://localhost:8100 in browser
 ```
 
 ### MCP Servers (spawned automatically — run manually for testing)
@@ -82,9 +79,10 @@ Expected responses:
 ## Architecture
 
 ```
-User (Streamlit :8501)
+User (browser http://localhost:8100)
       │
-      ▼ POST /chat
+      ▼ GET /  → serves frontend/index.html
+      │ POST /chat  (no auth)
 FastAPI Gateway :8100
       │
       ├── OrchestratorAgent (intent routing + LLM)
@@ -115,10 +113,9 @@ FastAPI Gateway :8100
 
 | Service | Port | File | Description |
 |---|---|---|---|
-| FastAPI Gateway | 8100 | `backend/main.py` | Chat, auth, Fyers token endpoints |
+| FastAPI + HTML UI | 8100 | `backend/main.py` | Chat, auth, Fyers token endpoints + serves `frontend/index.html` |
 | Analysis Agent | 8101 | `services/analysis_agent_service.py` | Market data + LLM analysis |
 | Execution Agent | 8102 | `services/execution_agent_service.py` | Trade plan + order placement |
-| Streamlit UI | 8501 | `frontend/app.py` | Chat interface |
 | Delta MCP | stdio | `mcp_servers/delta_server.py` | Auto-spawned per call |
 | Fyers MCP | stdio | `mcp_servers/fyers_server.py` | Auto-spawned per call |
 | Tavily MCP | stdio | `mcp_servers/tavily_server.py` | Auto-spawned per call |
@@ -225,7 +222,7 @@ curl http://localhost:8100/fyers/auth-status
 
 ## UI Layout
 
-The frontend (`frontend/app.py`) is a two-column Streamlit dashboard:
+The frontend is a pure HTML/CSS/JS single-page app served directly by FastAPI at `GET /` — no Streamlit, no login required.
 
 | Column | Width | Content |
 |---|---|---|
@@ -253,7 +250,7 @@ The frontend (`frontend/app.py`) is a two-column Streamlit dashboard:
 
 ## Features
 
-- **Split-panel dashboard** — live TradingView chart + structured trade setup summary side-by-side
+- **Pure HTML/CSS/JS frontend** — no framework, no login, served directly from FastAPI at port 8100
 - **Auto broker routing** — symbol auto-detects Delta (crypto) vs Fyers (NSE) with a live badge
 - **JWT auth** — login/register, sessions saved to SQLite
 - **Token counter** — live tokens used + estimated OpenAI cost
@@ -297,7 +294,8 @@ trade_assistant/
 │   ├── llm/factory.py               ← LLMFactory (OpenAI / Ollama)
 │   └── mcp/connector.py             ← call_mcp_tool() one-shot helper
 ├── frontend/
-│   └── app.py                       ← Split-panel: TradingView chart + trade summary
+│   ├── index.html                   ← HTML/CSS/JS dashboard (no framework, no login)
+│   └── app.py                       ← Legacy Streamlit UI (superseded)
 ├── tests/
 │   └── test_trade_assistant.py      ← 10 tests
 └── data/

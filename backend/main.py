@@ -9,8 +9,9 @@ from typing import Any, AsyncIterator
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from backend.agents.orchestrator import OrchestratorAgent
@@ -62,6 +63,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+# Serve the HTML frontend at /
+_FRONTEND = Path(__file__).resolve().parent.parent / "frontend"
+
+@app.get("/", include_in_schema=False)
+async def serve_ui():
+    return FileResponse(str(_FRONTEND / "index.html"))
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
@@ -118,8 +126,8 @@ async def login(form: OAuth2PasswordRequestForm = Depends()):
 
 # ── Session endpoints ─────────────────────────────────────────────────────────
 @app.post("/sessions/new", tags=["sessions"])
-async def new_session(user: dict = Depends(current_user)):
-    sid = create_session(user["sub"])
+async def new_session():
+    sid = create_session("guest")
     return {"session_id": sid}
 
 
@@ -137,17 +145,19 @@ async def get_messages(session_id: str, user: dict = Depends(current_user)):
 
 # ── Chat endpoint ─────────────────────────────────────────────────────────────
 @app.post("/chat", tags=["chat"])
-async def chat(req: ChatRequest, user: dict = Depends(current_user)):
-    """Main chat endpoint — routes to analysis/execution agents as needed."""
-    logger.info("chat: user=%s  session=%s  provider=%s  mode=%s  msg=%s",
-                user.get("username"), req.session_id,
-                req.llm_provider, req.trade_mode, req.message[:60])
+async def chat(req: ChatRequest):
+    """Main chat endpoint — no auth required. Auto-creates session if needed."""
+    # Auto-create session for anonymous use
+    session_id = req.session_id or create_session("guest")
+
+    logger.info("chat: session=%s  provider=%s  mode=%s  msg=%s",
+                session_id, req.llm_provider, req.trade_mode, req.message[:60])
     logger.info("chat: OPENAI_API_KEY set=%s  key_prefix=%s",
                 bool(settings.OPENAI_API_KEY),
                 settings.OPENAI_API_KEY[:12] + "..." if settings.OPENAI_API_KEY else "EMPTY")
 
     # Load conversation history for context
-    history = load_messages(req.session_id)
+    history = load_messages(session_id)
 
     # Get orchestrator for this LLM provider + mode
     orch = _get_orchestrator(req.llm_provider, req.trade_mode)
@@ -171,10 +181,10 @@ async def chat(req: ChatRequest, user: dict = Depends(current_user)):
         reply_tokens = len(reply.split()) * 2
 
     # Persist
-    save_message(req.session_id, "user",      req.message, user_tokens)
-    save_message(req.session_id, "assistant", reply,       reply_tokens)
+    save_message(session_id, "user",      req.message, user_tokens)
+    save_message(session_id, "assistant", reply,       reply_tokens)
 
-    total_tokens = session_total_tokens(req.session_id)
+    total_tokens = session_total_tokens(session_id)
 
     return {
         "reply":        reply,
