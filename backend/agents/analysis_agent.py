@@ -177,7 +177,9 @@ class AnalysisAgent:
                     f"Authentication failed for {source.upper()}. "
                     f"Please refresh your access token and update .env.\nDetails: {err}"
                 )
+            # Non-auth error (timeout, network) — log warning but don't fail the whole request
             logger.warning("analysis_agent: candle fetch warning — %s", err)
+            return {"error": err, "candles": [], "last_close": None}, None
         return data, None
 
     async def _fetch_market_extra(self, symbol: str, source: str) -> dict:
