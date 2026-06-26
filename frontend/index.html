@@ -395,13 +395,12 @@ function applySymbol(raw) {
 }
 
 /* ═══════════════════════════════════════════════════
-   TradingView widget — created ONCE, updated via API
-   Drawings sync to TV account when logged in at
-   tradingview.com in the same browser.
+   TradingView widget — single init, drawings preserved
 ═══════════════════════════════════════════════════ */
 let tvWidget      = null;
 let tvReady       = false;
-let pendingUpdate = null;
+let pendingSymbol = null;   // queued while loading
+let pendingTf     = null;
 
 function loadTVLib(cb) {
   if (window.TradingView) { cb(); return; }
@@ -419,6 +418,8 @@ function initChart(tvSym) {
       autosize:          true,
       symbol:            tvSym,
       interval:          currentTf,
+
+      /* appearance */
       timezone:          'Asia/Kolkata',
       theme:             'dark',
       style:             '1',
@@ -430,6 +431,14 @@ function initChart(tvSym) {
       hide_legend:       false,
       allow_symbol_change: true,
       save_image:        true,
+
+      /* drawings & layout saved to TV account cloud */
+      charts_storage_url:         'https://saveload.tradingview.com',
+      charts_storage_api_version: '1.1',
+      client_id:                  'tradingview.com',
+      user_id:                    'public_user_id',
+      load_last_chart:            true,
+
       enabled_features: [
         'study_templates',
         'use_localstorage_for_settings',
@@ -444,40 +453,54 @@ function initChart(tvSym) {
       disabled_features: [],
       support_host: 'https://www.tradingview.com',
     });
+
     tvWidget.onChartReady(() => {
       tvReady = true;
-      if (pendingUpdate) {
-        const { sym, tf } = pendingUpdate;
-        pendingUpdate = null;
-        _applyToChart(sym, tf);
+      // flush any changes that arrived while widget was loading
+      if (pendingSymbol) {
+        const s = pendingSymbol, t = pendingTf || currentTf;
+        pendingSymbol = pendingTf = null;
+        _setSymbol(s, t);
+      } else if (pendingTf) {
+        const t = pendingTf;
+        pendingTf = null;
+        _setTf(t);
       }
     });
   });
 }
 
-function _applyToChart(tvSym, tf) {
-  tvWidget.activeChart().setSymbol(tvSym, () => {
+function _setSymbol(tvSym, tf) {
+  try {
+    tvWidget.activeChart().setSymbol(tvSym, () => {
+      try { tvWidget.activeChart().setResolution(tf); } catch(_) {}
+    });
+  } catch(e) { console.warn('TV setSymbol failed:', e); }
+}
+
+function _setTf(tf) {
+  try {
     tvWidget.activeChart().setResolution(tf);
-  });
+  } catch(e) { console.warn('TV setResolution failed:', e); }
 }
 
 function updateChart(tvSym) {
   if (!tvWidget) { initChart(tvSym); return; }
-  if (!tvReady)  { pendingUpdate = { sym: tvSym, tf: currentTf }; return; }
-  _applyToChart(tvSym, currentTf);
+  if (!tvReady)  { pendingSymbol = tvSym; pendingTf = currentTf; return; }
+  _setSymbol(tvSym, currentTf);
 }
 
 /* ═══════════════════════════════════════════════════
-   TF buttons
+   TF buttons — resolution only, no symbol change
 ═══════════════════════════════════════════════════ */
 document.querySelectorAll('.tf-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentTf = btn.dataset.tf;
-    if (!tvWidget) return;
-    if (!tvReady) { pendingUpdate = { sym: toTVSymbol(currentSym), tf: currentTf }; return; }
-    tvWidget.activeChart().setResolution(currentTf);
+    if (!tvWidget)  return;
+    if (!tvReady)   { pendingTf = currentTf; return; }
+    _setTf(currentTf);
   });
 });
 
