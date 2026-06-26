@@ -236,7 +236,7 @@
         <div class="bar-label">Symbol</div>
 
         <select id="sym-select">
-          <optgroup label="── Crypto (Delta) ──">
+          <optgroup label="── Crypto · Delta Exchange India ──">
             <option value="BTCUSDT" selected>BTC/USDT — Bitcoin</option>
             <option value="ETHUSDT">ETH/USDT — Ethereum</option>
             <option value="SOLUSDT">SOL/USDT — Solana</option>
@@ -245,20 +245,15 @@
             <option value="DOGEUSDT">DOGE/USDT — Dogecoin</option>
             <option value="AVAXUSDT">AVAX/USDT — Avalanche</option>
             <option value="LINKUSDT">LINK/USDT — Chainlink</option>
-            <option value="MATICUSDT">MATIC/USDT — Polygon</option>
-            <option value="ADAUSDT">ADA/USDT — Cardano</option>
-            <option value="DOTUSDT">DOT/USDT — Polkadot</option>
-            <option value="XRPUSDT">XRP/USDT — Ripple</option>
-            <option value="LTCUSDT">LTC/USDT — Litecoin</option>
           </optgroup>
-          <optgroup label="── Indices (Fyers) ──">
+          <optgroup label="── Indices · Fyers ──">
             <option value="NIFTY50">NIFTY 50</option>
             <option value="BANKNIFTY">BANK NIFTY</option>
-            <option value="SENSEX">SENSEX</option>
-            <option value="MIDCPNIFTY">MIDCAP NIFTY</option>
             <option value="FINNIFTY">FIN NIFTY</option>
+            <option value="MIDCPNIFTY">MIDCAP NIFTY</option>
+            <option value="SENSEX">SENSEX</option>
           </optgroup>
-          <optgroup label="── Banking ──">
+          <optgroup label="── Banking · NSE ──">
             <option value="HDFCBANK">HDFC BANK</option>
             <option value="ICICIBANK">ICICI BANK</option>
             <option value="SBIN">SBI</option>
@@ -270,7 +265,7 @@
             <option value="PNB">PNB</option>
             <option value="BANKBARODA">BANK OF BARODA</option>
           </optgroup>
-          <optgroup label="── IT / Tech ──">
+          <optgroup label="── IT / Tech · NSE ──">
             <option value="TCS">TCS</option>
             <option value="INFY">INFOSYS</option>
             <option value="WIPRO">WIPRO</option>
@@ -278,7 +273,7 @@
             <option value="TECHM">TECH MAHINDRA</option>
             <option value="LTIM">LTI MINDTREE</option>
           </optgroup>
-          <optgroup label="── Large Cap ──">
+          <optgroup label="── Large Cap · NSE ──">
             <option value="RELIANCE">RELIANCE</option>
             <option value="BAJAJFINANCE">BAJAJ FINANCE</option>
             <option value="TATAMOTORS">TATA MOTORS</option>
@@ -348,11 +343,17 @@ let currentSym   = 'BTCUSDT';
    Symbol helpers
 ═══════════════════════════════════════════════════ */
 const DELTA_MAP = {
+  // Verified Delta Exchange India perpetuals on TradingView (DELTA:XXXX.P)
   BTC:'BTCUSDT', ETH:'ETHUSDT', SOL:'SOLUSDT', BNB:'BNBUSDT',
-  XAU:'XAUUSDT', DOGE:'DOGEUSDT', AVAX:'AVAXUSDT',
-  MATIC:'MATICUSDT', LINK:'LINKUSDT',
+  XAU:'XAUUSDT', DOGE:'DOGEUSDT', AVAX:'AVAXUSDT', LINK:'LINKUSDT',
+  // Allow USDT-suffixed input too
+  BTCUSDT:'BTCUSDT', ETHUSDT:'ETHUSDT', SOLUSDT:'SOLUSDT',
+  BNBUSDT:'BNBUSDT', XAUUSDT:'XAUUSDT', DOGEUSDT:'DOGEUSDT',
+  AVAXUSDT:'AVAXUSDT', LINKUSDT:'LINKUSDT',
 };
 const DELTA_SYMS = new Set([...Object.keys(DELTA_MAP), ...Object.values(DELTA_MAP)]);
+
+// NSE equity suffix for TradingView
 const NSE_TV = {
   NIFTY:'NSE:NIFTY', NIFTY50:'NSE:NIFTY',
   BANKNIFTY:'NSE:BANKNIFTY', SENSEX:'BSE:SENSEX',
@@ -365,13 +366,17 @@ function detectBroker(s) {
   return 'fyers';
 }
 
-// TradingView symbol — Delta perps are DELTA:BTCUSDT.P
+// TradingView symbol:
+//   Delta perps  → DELTA:BTCUSDT.P
+//   NSE indices  → NSE:NIFTY, NSE:BANKNIFTY etc.
+//   NSE equities → NSE:RELIANCE-EQ
 function toTVSymbol(s) {
   s = s.toUpperCase().replace(/\.P$/, '');
-  if (NSE_TV[s])           return NSE_TV[s];
+  if (NSE_TV[s])  return NSE_TV[s];
   const base = DELTA_MAP[s] || (s.endsWith('USDT') ? s : null);
-  if (base)                return 'DELTA:' + base + '.P';
-  return 'NSE:' + s;
+  if (base)       return 'DELTA:' + base + '.P';
+  // NSE equity
+  return 'NSE:' + s + '-EQ';
 }
 
 function toBackendSymbol(s) {
