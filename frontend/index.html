@@ -237,19 +237,19 @@
 
         <select id="sym-select">
           <optgroup label="── Crypto (Delta) ──">
-            <option value="BTCUSDT" selected>BTC/USDT — Bitcoin</option>
-            <option value="ETHUSDT">ETH/USDT — Ethereum</option>
-            <option value="SOLUSDT">SOL/USDT — Solana</option>
-            <option value="BNBUSDT">BNB/USDT — BNB</option>
-            <option value="XAUUSDT">XAU/USDT — Gold</option>
-            <option value="DOGEUSDT">DOGE/USDT — Dogecoin</option>
-            <option value="AVAXUSDT">AVAX/USDT — Avalanche</option>
-            <option value="LINKUSDT">LINK/USDT — Chainlink</option>
-            <option value="MATICUSDT">MATIC/USDT — Polygon</option>
-            <option value="ADAUSDT">ADA/USDT — Cardano</option>
-            <option value="DOTUSDT">DOT/USDT — Polkadot</option>
-            <option value="XRPUSDT">XRP/USDT — Ripple</option>
-            <option value="LTCUSDT">LTC/USDT — Litecoin</option>
+            <option value="BTCUSDT" selected>BTC/USD — Bitcoin</option>
+            <option value="ETHUSDT">ETH/USD — Ethereum</option>
+            <option value="SOLUSDT">SOL/USD — Solana</option>
+            <option value="BNBUSDT">BNB/USD — BNB</option>
+            <option value="XAUUSDT">XAU/USD — Gold</option>
+            <option value="DOGEUSDT">DOGE/USD — Dogecoin</option>
+            <option value="AVAXUSDT">AVAX/USD — Avalanche</option>
+            <option value="LINKUSDT">LINK/USD — Chainlink</option>
+            <option value="MATICUSDT">MATIC/USD — Polygon</option>
+            <option value="ADAUSDT">ADA/USD — Cardano</option>
+            <option value="DOTUSDT">DOT/USD — Polkadot</option>
+            <option value="XRPUSDT">XRP/USD — Ripple</option>
+            <option value="LTCUSDT">LTC/USD — Litecoin</option>
           </optgroup>
           <optgroup label="── Indices (Fyers) ──">
             <option value="NIFTY50">NIFTY 50</option>
@@ -348,9 +348,13 @@ let currentSym   = 'BTCUSDT';
    Symbol helpers
 ═══════════════════════════════════════════════════ */
 const DELTA_MAP = {
-  BTC:'BTCUSDT', ETH:'ETHUSDT', SOL:'SOLUSDT', BNB:'BNBUSDT',
-  XAU:'XAUUSDT', DOGE:'DOGEUSDT', AVAX:'AVAXUSDT',
-  MATIC:'MATICUSDT', LINK:'LINKUSDT',
+  BTC:'BTCUSD', ETH:'ETHUSD', SOL:'SOLUSD', BNB:'BNBUSD',
+  XAU:'XAUUSD', DOGE:'DOGEUSD', AVAX:'AVAXUSD',
+  MATIC:'MATICUSD', LINK:'LINKUSD',
+  // USDT variants also map to Delta perpetuals
+  BTCUSDT:'BTCUSD', ETHUSDT:'ETHUSD', SOLUSDT:'SOLUSD',
+  BNBUSDT:'BNBUSD', XAUUSDT:'XAUUSD', DOGEUSDT:'DOGEUSD',
+  AVAXUSDT:'AVAXUSD', MATICUSDT:'MATICUSD', LINKUSDT:'LINKUSD',
 };
 const DELTA_SYMS = new Set([...Object.keys(DELTA_MAP), ...Object.values(DELTA_MAP)]);
 const NSE_TV = {
@@ -367,9 +371,13 @@ function detectBroker(s) {
 
 function toTVSymbol(s) {
   s = s.toUpperCase().replace(/\.P$/, '');
-  if (NSE_TV[s])          return NSE_TV[s];
-  if (DELTA_MAP[s])       return 'BINANCE:' + DELTA_MAP[s];
-  if (s.endsWith('USDT')) return 'BINANCE:' + s;
+  if (NSE_TV[s])    return NSE_TV[s];
+  // Delta perpetuals: DELTA:BTCUSD.P
+  const deltaBase = DELTA_MAP[s];
+  if (deltaBase)    return 'DELTA:' + deltaBase + '.P';
+  // bare USDT suffix typed directly
+  if (s.endsWith('USDT')) return 'DELTA:' + s.replace(/USDT$/, 'USD') + '.P';
+  if (s.endsWith('USD'))  return 'DELTA:' + s + '.P';
   return 'NSE:' + s;
 }
 
