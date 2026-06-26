@@ -367,16 +367,15 @@ function detectBroker(s) {
 }
 
 // TradingView symbol:
-//   Delta perps  → DELTA:BTCUSDT.P
-//   NSE indices  → NSE:NIFTY, NSE:BANKNIFTY etc.
-//   NSE equities → NSE:RELIANCE-EQ
+//   Delta perps  → DELTA:BTCUSDT.P  (confirmed working)
+//   NSE indices  → NSE:NIFTY, NSE:BANKNIFTY, BSE:SENSEX
+//   NSE equities → NSE:RELIANCE  (no suffix — -EQ is Fyers only)
 function toTVSymbol(s) {
   s = s.toUpperCase().replace(/\.P$/, '');
   if (NSE_TV[s])  return NSE_TV[s];
   const base = DELTA_MAP[s] || (s.endsWith('USDT') ? s : null);
   if (base)       return 'DELTA:' + base + '.P';
-  // NSE equity
-  return 'NSE:' + s + '-EQ';
+  return 'NSE:' + s;
 }
 
 function toBackendSymbol(s) {
