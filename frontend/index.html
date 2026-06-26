@@ -356,8 +356,42 @@
       <div class="sym-row">
         <input id="sym-input" type="text" value="BTCUSDT" placeholder="BTCUSDT / RELIANCE / NIFTY" />
         <span id="broker-badge">Delta</span>
-        <button class="btn btn-primary" id="btn-analyse">📊 Analyse</button>
-        <button class="btn btn-secondary" id="btn-execute">⚡ Execute</button>
+      </div>
+      <!-- Quick-select dropdown -->
+      <select id="sym-select" style="width:100%;margin-top:6px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:12px;padding:5px 8px;">
+        <optgroup label="── Crypto (Delta) ──">
+          <option value="BTCUSDT">BTC/USDT</option>
+          <option value="ETHUSDT">ETH/USDT</option>
+          <option value="SOLUSDT">SOL/USDT</option>
+          <option value="BNBUSDT">BNB/USDT</option>
+          <option value="XAUUSDT">XAU/USDT (Gold)</option>
+          <option value="DOGEUSDT">DOGE/USDT</option>
+          <option value="AVAXUSDT">AVAX/USDT</option>
+        </optgroup>
+        <optgroup label="── Indices (Fyers) ──">
+          <option value="NIFTY50">NIFTY 50</option>
+          <option value="BANKNIFTY">BANK NIFTY</option>
+          <option value="SENSEX">SENSEX</option>
+        </optgroup>
+        <optgroup label="── NSE Equities ──">
+          <option value="RELIANCE">RELIANCE</option>
+          <option value="TCS">TCS</option>
+          <option value="HDFCBANK">HDFC BANK</option>
+          <option value="ICICIBANK">ICICI BANK</option>
+          <option value="INFY">INFOSYS</option>
+          <option value="SBIN">SBI</option>
+          <option value="AXISBANK">AXIS BANK</option>
+          <option value="BAJAJFINANCE">BAJAJ FINANCE</option>
+          <option value="TATAMOTORS">TATA MOTORS</option>
+          <option value="WIPRO">WIPRO</option>
+          <option value="MARUTI">MARUTI</option>
+          <option value="ONGC">ONGC</option>
+          <option value="RBLBANK">RBL BANK</option>
+        </optgroup>
+      </select>
+      <div class="sym-row" style="margin-top:6px">
+        <button class="btn btn-primary" id="btn-analyse" style="flex:1">📊 Analyse</button>
+        <button class="btn btn-secondary" id="btn-execute" style="flex:1">⚡ Execute</button>
       </div>
       <div class="toggle-row">
         <div class="toggle-btn active" id="mode-paper" data-mode="paper">Paper</div>
@@ -423,33 +457,50 @@ function toBackendSymbol(raw) {
 }
 
 // ── TradingView widget ──────────────────────────────────────────────────────
-let tvScript = null;
+// Use the widget JS API (not the embed script) so the iframe is created ONCE.
+// Changing symbol/interval calls widget.setSymbol() — drawings are preserved.
+let tvWidget = null;
+let tvLibLoaded = false;
 
-function loadChart(tvSym) {
-  const container = document.getElementById('tv-widget');
-  container.innerHTML = '';
-  if (tvScript) { tvScript.remove(); tvScript = null; }
+function loadTVLib(cb) {
+  if (tvLibLoaded) { cb(); return; }
+  const s = document.createElement('script');
+  s.src = 'https://s3.tradingview.com/tv.js';
+  s.onload = () => { tvLibLoaded = true; cb(); };
+  document.head.appendChild(s);
+}
 
-  const script = document.createElement('script');
-  script.type  = 'text/javascript';
-  script.src   = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
-  script.async = true;
-  script.innerHTML = JSON.stringify({
-    autosize: true,
-    symbol: tvSym,
-    interval: currentTf,
-    timezone: 'Asia/Kolkata',
-    theme: 'dark',
-    style: '1',
-    locale: 'in',
-    withdateranges: true,
-    hide_side_toolbar: false,
-    allow_symbol_change: false,
-    studies: ['STD;MACD', 'STD;RSI'],
-    support_host: 'https://www.tradingview.com',
+function initChart(tvSym) {
+  loadTVLib(() => {
+    tvWidget = new TradingView.widget({
+      container_id: 'tv-widget',
+      autosize: true,
+      symbol: tvSym,
+      interval: currentTf,
+      timezone: 'Asia/Kolkata',
+      theme: 'dark',
+      style: '1',
+      locale: 'in',
+      withdateranges: true,
+      hide_side_toolbar: false,
+      allow_symbol_change: true,
+      support_host: 'https://www.tradingview.com',
+    });
   });
-  container.appendChild(script);
-  tvScript = script;
+}
+
+function updateChart(tvSym) {
+  if (!tvWidget || !tvWidget.iframe) {
+    // Widget not ready yet — (re)init
+    initChart(tvSym);
+    return;
+  }
+  // Use the widget API to update symbol + interval without destroying the iframe
+  tvWidget.onChartReady(() => {
+    tvWidget.activeChart().setSymbol(tvSym, () => {
+      tvWidget.activeChart().setResolution(currentTf);
+    });
+  });
 }
 
 // ── Backend health + session init ──────────────────────────────────────────
@@ -503,8 +554,20 @@ document.querySelectorAll('.tf-btn').forEach(btn => {
     document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentTf = btn.dataset.tf;
-    loadChart(toTVSymbol(document.getElementById('sym-input').value || 'BTCUSDT'));
+    updateChart(toTVSymbol(document.getElementById('sym-input').value || 'BTCUSDT'));
   });
+});
+
+// ── Symbol dropdown ───────────────────────────────────────────────────────
+document.getElementById('sym-select').addEventListener('change', function() {
+  const val = this.value;
+  symInput.value = val;
+  // Update broker badge
+  const broker = detectBroker(val);
+  brokerBadge.textContent = broker === 'delta' ? 'Delta' : 'Fyers (NSE)';
+  brokerBadge.style.color = broker === 'delta' ? '#60a5fa' : '#34d399';
+  // Update chart immediately
+  updateChart(toTVSymbol(val));
 });
 
 // ── Trade mode toggles ───────────────────────────────────────────────────
@@ -528,8 +591,8 @@ async function runAction(type) {
   const intent = type === 'analyse' ? 'Analyse' : 'Execute trade on';
   const msg    = `${intent} ${sym} for intraday trade`;
 
-  // Reload chart for new symbol
-  loadChart(tvSym);
+  // Update chart for new symbol (preserves drawings)
+  updateChart(tvSym);
 
   // Disable buttons + show spinner
   setLoading(true);
@@ -678,7 +741,7 @@ function esc(s) {
 
 // ── Boot ──────────────────────────────────────────────────────────────────
 initSession();
-loadChart(toTVSymbol(symInput.value));
+initChart(toTVSymbol(symInput.value));
 </script>
 </body>
 </html>
