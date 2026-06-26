@@ -72,7 +72,7 @@ Expected responses:
 {"name": "execution_agent", "url": "http://0.0.0.0:8102", "capabilities": ["task"]}
 ```
 
-> **Note:** The gateway (:8100) has an in-process fallback — if :8101 is down, analysis runs inside the main process automatically.
+> **Note:** The gateway (:8100) has an in-process fallback — if :8101 is down **or times out**, analysis runs inside the main process automatically. A2A client timeout is 300 s. MCP calls (candles, metrics, news) run in parallel to reduce total latency.
 
 ---
 

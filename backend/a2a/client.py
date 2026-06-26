@@ -43,6 +43,12 @@ class A2AClient:
                     task_id=task.task_id, agent=agent, status="failed",
                     error=f"Agent service unreachable at {self.base_url}. Is it running? ({exc})",
                 )
+            except httpx.TimeoutException as exc:
+                logger.error("A2AClient: timeout waiting for %s — %s", self.base_url, exc)
+                return TaskResponse(
+                    task_id=task.task_id, agent=agent, status="failed",
+                    error=f"Agent service unreachable at {self.base_url} (timeout after {self.timeout}s). ({exc})",
+                )
             except httpx.HTTPStatusError as exc:
                 logger.error("A2AClient: HTTP %d from %s", exc.response.status_code, self.base_url)
                 return TaskResponse(

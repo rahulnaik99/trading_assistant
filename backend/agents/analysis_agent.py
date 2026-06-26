@@ -126,14 +126,18 @@ class AnalysisAgent:
         logger.info("analysis_agent START  symbol=%s  type=%s  source=%s  interval=%s  llm=%s",
                     symbol, trade_type, source, interval, llm_provider)
 
-        # Fetch market data
-        candle_data, auth_err = await self._fetch_candles(symbol, source, interval)
+        # Fetch candles, market extras, and news in parallel
+        import asyncio
+        candle_task  = asyncio.create_task(self._fetch_candles(symbol, source, interval))
+        extra_task   = asyncio.create_task(self._fetch_market_extra(symbol, source))
+        news_task    = asyncio.create_task(self._fetch_news(symbol))
+        (candle_data, auth_err), market_extra, news_context = await asyncio.gather(
+            candle_task, extra_task, news_task,
+        )
+
         if auth_err:
             return TaskResponse(task_id=task.task_id, agent=self.agent_name,
                                 status="failed", error=auth_err)
-
-        market_extra = await self._fetch_market_extra(symbol, source)
-        news_context = await self._fetch_news(symbol)
 
         # Build prompt and call LLM (lazy-loaded, no top-level import)
         prompt = _build_prompt(symbol, trade_type, interval,

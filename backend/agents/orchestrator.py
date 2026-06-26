@@ -129,8 +129,8 @@ class OrchestratorAgent:
     def __init__(self, llm_provider: str = "openai", mode: str = "paper") -> None:
         self._llm_provider = llm_provider
         self._mode = mode
-        self._analysis_client  = A2AClient(settings.ANALYSIS_AGENT_URL)
-        self._execution_client = A2AClient(settings.EXECUTION_AGENT_URL)
+        self._analysis_client  = A2AClient(settings.ANALYSIS_AGENT_URL,  timeout=300.0)
+        self._execution_client = A2AClient(settings.EXECUTION_AGENT_URL, timeout=300.0)
         self._llm = None
         logger.info("OrchestratorAgent init  provider=%s  mode=%s  "
                     "analysis_url=%s  execution_url=%s",
