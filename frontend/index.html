@@ -395,25 +395,27 @@ function applySymbol(raw) {
 }
 
 /* ═══════════════════════════════════════════════════
-   TradingView widget — single init, drawings preserved
+   TradingView widget
+   - tv.js loaded once, widget recreated on sym/TF change
+   - setSymbol/setResolution are Charting Library (paid) only
+   - load_last_chart restores drawings from TV cloud on each init
 ═══════════════════════════════════════════════════ */
-let tvWidget      = null;
-let tvReady       = false;
-let pendingSymbol = null;   // queued while loading
-let pendingTf     = null;
+let tvLibLoaded = false;
 
 function loadTVLib(cb) {
-  if (window.TradingView) { cb(); return; }
+  if (tvLibLoaded) { cb(); return; }
   const s = document.createElement('script');
   s.src = 'https://s3.tradingview.com/tv.js';
-  s.onload = cb;
+  s.onload = () => { tvLibLoaded = true; cb(); };
   document.head.appendChild(s);
 }
 
-function initChart(tvSym) {
+function buildWidget(tvSym) {
+  // Clear container before creating a new widget instance
+  document.getElementById('tv-widget').innerHTML = '';
+
   loadTVLib(() => {
-    tvReady  = false;
-    tvWidget = new TradingView.widget({
+    new TradingView.widget({
       container_id:      'tv-widget',
       autosize:          true,
       symbol:            tvSym,
@@ -437,7 +439,7 @@ function initChart(tvSym) {
       charts_storage_api_version: '1.1',
       client_id:                  'tradingview.com',
       user_id:                    'public_user_id',
-      load_last_chart:            true,
+      load_last_chart:             true,
 
       enabled_features: [
         'study_templates',
@@ -453,54 +455,22 @@ function initChart(tvSym) {
       disabled_features: [],
       support_host: 'https://www.tradingview.com',
     });
-
-    tvWidget.onChartReady(() => {
-      tvReady = true;
-      // flush any changes that arrived while widget was loading
-      if (pendingSymbol) {
-        const s = pendingSymbol, t = pendingTf || currentTf;
-        pendingSymbol = pendingTf = null;
-        _setSymbol(s, t);
-      } else if (pendingTf) {
-        const t = pendingTf;
-        pendingTf = null;
-        _setTf(t);
-      }
-    });
   });
 }
 
-function _setSymbol(tvSym, tf) {
-  try {
-    tvWidget.activeChart().setSymbol(tvSym, () => {
-      try { tvWidget.activeChart().setResolution(tf); } catch(_) {}
-    });
-  } catch(e) { console.warn('TV setSymbol failed:', e); }
-}
-
-function _setTf(tf) {
-  try {
-    tvWidget.activeChart().setResolution(tf);
-  } catch(e) { console.warn('TV setResolution failed:', e); }
-}
-
 function updateChart(tvSym) {
-  if (!tvWidget) { initChart(tvSym); return; }
-  if (!tvReady)  { pendingSymbol = tvSym; pendingTf = currentTf; return; }
-  _setSymbol(tvSym, currentTf);
+  buildWidget(tvSym);
 }
 
 /* ═══════════════════════════════════════════════════
-   TF buttons — resolution only, no symbol change
+   TF buttons — rebuild widget with new interval
 ═══════════════════════════════════════════════════ */
 document.querySelectorAll('.tf-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentTf = btn.dataset.tf;
-    if (!tvWidget)  return;
-    if (!tvReady)   { pendingTf = currentTf; return; }
-    _setTf(currentTf);
+    buildWidget(toTVSymbol(currentSym));
   });
 });
 
