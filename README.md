@@ -226,7 +226,7 @@ The frontend is a pure HTML/CSS/JS single-page app served directly by FastAPI at
 
 | Column | Width | Content |
 |---|---|---|
-| Left | ~65% | Full TradingView site loaded in an iframe (`tradingview.com/chart/?symbol=...&interval=...`) — all TV features, drawings sync to TV account, TF bar updates the URL |
+| Left | ~65% | TradingView widget (`tv.js`) — created once, symbol/TF updated via `setSymbol()`/`setResolution()` without destroying the iframe. Drawings sync to TV account (log in on tradingview.com in the same browser). |
 | Right | ~35% | Symbol dropdown (30+ symbols: Crypto/Indices/Banking/IT/Large Cap), broker badge, Analyse/Execute buttons, trade summary cards. **Hide/Show Panel** in header. |
 
 **Symbol → Broker auto-detection:**

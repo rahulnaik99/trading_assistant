@@ -75,6 +75,18 @@
       display: block;
     }
 
+    /* TV widget container must fill all remaining height */
+    #tv-container {
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      position: relative;
+    }
+    #tv-widget {
+      width: 100%;
+      height: 100%;
+    }
+
     /* ── Right panel ── */
     #panel-col {
       width: var(--panel-w); flex-shrink: 0;
@@ -197,7 +209,7 @@
 
   <div id="workspace">
 
-    <!-- Chart: full TradingView site in iframe -->
+    <!-- Chart: TradingView widget (official embed — drawings sync to TV account) -->
     <div id="chart-col">
       <div id="tf-bar">
         <span class="tf-label">TF</span>
@@ -211,7 +223,9 @@
         <button class="tf-btn" data-tf="D">1D</button>
         <button class="tf-btn" data-tf="W">1W</button>
       </div>
-      <iframe id="tv-frame" src="" allowfullscreen></iframe>
+      <div id="tv-container">
+        <div id="tv-widget"></div>
+      </div>
     </div>
 
     <!-- Right panel -->
@@ -377,21 +391,80 @@ function applySymbol(raw) {
   symDisplay.textContent   = currentSym;
   brokerBadge.textContent  = broker === 'delta' ? 'Delta' : 'Fyers NSE';
   brokerBadge.style.color  = broker === 'delta' ? '#60a5fa' : '#34d399';
-  loadTVFrame();
+  updateChart(toTVSymbol(currentSym));
 }
 
 /* ═══════════════════════════════════════════════════
-   TradingView — full site iframe
-   URL: https://www.tradingview.com/chart/?symbol=BINANCE:BTCUSDT&interval=5
+   TradingView widget — created ONCE, updated via API
+   Drawings sync to TV account when logged in at
+   tradingview.com in the same browser.
 ═══════════════════════════════════════════════════ */
-function tvURL() {
-  return 'https://www.tradingview.com/chart/?symbol='
-    + encodeURIComponent(toTVSymbol(currentSym))
-    + '&interval=' + currentTf;
+let tvWidget      = null;
+let tvReady       = false;
+let pendingUpdate = null;
+
+function loadTVLib(cb) {
+  if (window.TradingView) { cb(); return; }
+  const s = document.createElement('script');
+  s.src = 'https://s3.tradingview.com/tv.js';
+  s.onload = cb;
+  document.head.appendChild(s);
 }
 
-function loadTVFrame() {
-  tvFrame.src = tvURL();
+function initChart(tvSym) {
+  loadTVLib(() => {
+    tvReady  = false;
+    tvWidget = new TradingView.widget({
+      container_id:      'tv-widget',
+      autosize:          true,
+      symbol:            tvSym,
+      interval:          currentTf,
+      timezone:          'Asia/Kolkata',
+      theme:             'dark',
+      style:             '1',
+      locale:            'in',
+      toolbar_bg:        '#161b22',
+      withdateranges:    true,
+      hide_top_toolbar:  false,
+      hide_side_toolbar: false,
+      hide_legend:       false,
+      allow_symbol_change: true,
+      save_image:        true,
+      enabled_features: [
+        'study_templates',
+        'use_localstorage_for_settings',
+        'save_chart_properties_to_local_storage',
+        'create_volume_indicator_by_default',
+        'header_saveload',
+        'header_screenshot',
+        'header_undo_redo',
+        'show_chart_property_page',
+        'side_toolbar_in_fullscreen_mode',
+      ],
+      disabled_features: [],
+      support_host: 'https://www.tradingview.com',
+    });
+    tvWidget.onChartReady(() => {
+      tvReady = true;
+      if (pendingUpdate) {
+        const { sym, tf } = pendingUpdate;
+        pendingUpdate = null;
+        _applyToChart(sym, tf);
+      }
+    });
+  });
+}
+
+function _applyToChart(tvSym, tf) {
+  tvWidget.activeChart().setSymbol(tvSym, () => {
+    tvWidget.activeChart().setResolution(tf);
+  });
+}
+
+function updateChart(tvSym) {
+  if (!tvWidget) { initChart(tvSym); return; }
+  if (!tvReady)  { pendingUpdate = { sym: tvSym, tf: currentTf }; return; }
+  _applyToChart(tvSym, currentTf);
 }
 
 /* ═══════════════════════════════════════════════════
@@ -402,7 +475,9 @@ document.querySelectorAll('.tf-btn').forEach(btn => {
     document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentTf = btn.dataset.tf;
-    loadTVFrame();
+    if (!tvWidget) return;
+    if (!tvReady) { pendingUpdate = { sym: toTVSymbol(currentSym), tf: currentTf }; return; }
+    tvWidget.activeChart().setResolution(currentTf);
   });
 });
 
