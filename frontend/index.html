@@ -8,99 +8,185 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:        #0d1117;
-      --surface:   #161b22;
-      --border:    #30363d;
-      --border2:   #21262d;
-      --text:      #c9d1d9;
-      --muted:     #8b949e;
-      --accent:    #58a6ff;
-      --bull:      #3fb950;
-      --bear:      #f85149;
-      --warn:      #d29922;
-      --radius:    8px;
+      --bg:       #0d1117;
+      --surface:  #161b22;
+      --border:   #30363d;
+      --border2:  #21262d;
+      --text:     #c9d1d9;
+      --muted:    #8b949e;
+      --accent:   #58a6ff;
+      --bull:     #3fb950;
+      --bear:     #f85149;
+      --warn:     #d29922;
+      --radius:   8px;
+      --panel-w:  340px;
     }
 
-    body {
+    html, body {
+      height: 100%;
       background: var(--bg);
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: 13px;
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
       overflow: hidden;
     }
 
-    /* ── Top bar ── */
+    /* ── Layout shell ── */
+    #shell {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    /* ── Header ── */
     header {
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 8px 16px;
-      border-bottom: 1px solid var(--border);
+      gap: 10px;
+      padding: 6px 14px;
       background: var(--surface);
+      border-bottom: 1px solid var(--border);
       flex-shrink: 0;
+      z-index: 20;
     }
-    header h1 { font-size: 15px; font-weight: 700; color: var(--accent); white-space: nowrap; }
-    header .sep { color: var(--border); }
+    header h1 {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--accent);
+      white-space: nowrap;
+      margin-right: 4px;
+    }
+    .sep { color: var(--border); font-size: 16px; }
 
     .status-dot {
-      width: 8px; height: 8px; border-radius: 50%;
+      width: 7px; height: 7px; border-radius: 50%;
       background: #444; flex-shrink: 0;
     }
-    .status-dot.ok  { background: var(--bull); }
+    .status-dot.ok  { background: var(--bull); box-shadow: 0 0 4px var(--bull); }
     .status-dot.err { background: var(--bear); }
-
     #status-text { font-size: 11px; color: var(--muted); }
 
-    /* ── Main split ── */
-    main {
+    /* spacer pushes toggle to the right */
+    .spacer { flex: 1; }
+
+    /* panel toggle button */
+    #btn-toggle-panel {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      background: var(--bg);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: color .15s, border-color .15s;
+    }
+    #btn-toggle-panel:hover { color: var(--accent); border-color: var(--accent); }
+    #btn-toggle-panel .arrow { font-size: 13px; }
+
+    /* ── Main row ── */
+    #workspace {
       display: flex;
       flex: 1;
       overflow: hidden;
-      gap: 0;
     }
 
-    /* ── Left: chart ── */
+    /* ── Chart column ── */
     #chart-col {
-      flex: 13;
+      flex: 1;
       display: flex;
       flex-direction: column;
-      border-right: 1px solid var(--border);
+      min-width: 0;
       overflow: hidden;
+      transition: flex .25s ease;
     }
-    #chart-col iframe,
-    #chart-col .tradingview-widget-container {
+
+    /* TF bar */
+    #tf-bar {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      padding: 4px 10px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #tf-bar .tf-label {
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin-right: 4px;
+    }
+    .tf-btn {
+      padding: 2px 8px;
+      border: 1px solid var(--border2);
+      border-radius: 4px;
+      background: var(--bg);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .1s;
+    }
+    .tf-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .tf-btn.active { background: var(--accent); color: #0d1117; border-color: var(--accent); }
+
+    /* TV container */
+    #tv-container {
       flex: 1;
+      width: 100%;
+      min-height: 0;
+    }
+    #tv-widget {
       width: 100%;
       height: 100%;
     }
 
-    /* ── Right: panel ── */
+    /* ── Right panel ── */
     #panel-col {
-      flex: 7;
+      width: var(--panel-w);
+      flex-shrink: 0;
       display: flex;
       flex-direction: column;
+      border-left: 1px solid var(--border);
       overflow: hidden;
+      transition: width .25s ease, opacity .2s ease;
+      position: relative;
     }
 
-    /* Symbol bar at top of panel */
+    /* Hidden state */
+    #panel-col.hidden {
+      width: 0;
+      opacity: 0;
+      border-left: none;
+      pointer-events: none;
+    }
+
+    /* Symbol bar */
     #symbol-bar {
       padding: 10px 12px;
       border-bottom: 1px solid var(--border);
       background: var(--surface);
       flex-shrink: 0;
     }
-    #symbol-bar label {
-      font-size: 11px;
+    .bar-label {
+      font-size: 10px;
       color: var(--muted);
-      display: block;
-      margin-bottom: 5px;
       text-transform: uppercase;
-      letter-spacing: .05em;
+      letter-spacing: .06em;
+      margin-bottom: 5px;
     }
-    .sym-row { display: flex; gap: 6px; align-items: center; }
+    .sym-row {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      margin-bottom: 6px;
+    }
     #sym-input {
       flex: 1;
       background: var(--bg);
@@ -108,46 +194,64 @@
       border-radius: var(--radius);
       color: var(--text);
       font-size: 13px;
-      padding: 6px 10px;
+      font-weight: 600;
+      padding: 5px 9px;
       outline: none;
       text-transform: uppercase;
+      min-width: 0;
     }
     #sym-input:focus { border-color: var(--accent); }
 
+    #broker-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 7px;
+      border-radius: 4px;
+      background: var(--border2);
+      color: var(--accent);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    #sym-select {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: 11px;
+      padding: 5px 8px;
+      margin-bottom: 6px;
+    }
+
+    .action-row {
+      display: flex;
+      gap: 5px;
+      margin-bottom: 6px;
+    }
     .btn {
-      padding: 6px 12px;
+      padding: 6px 10px;
       border: none;
       border-radius: var(--radius);
       font-size: 12px;
       font-weight: 600;
       cursor: pointer;
-      white-space: nowrap;
+      flex: 1;
     }
-    .btn-primary { background: var(--accent); color: #0d1117; }
-    .btn-primary:hover { opacity: .85; }
-    .btn-secondary { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+    .btn-primary  { background: var(--accent); color: #0d1117; }
+    .btn-primary:hover  { opacity: .85; }
+    .btn-secondary { background: var(--bg); border: 1px solid var(--border); color: var(--text); }
     .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
-    .btn:disabled { opacity: .45; cursor: default; }
+    .btn:disabled { opacity: .4; cursor: default; }
 
-    #broker-badge {
-      font-size: 11px;
-      font-weight: 700;
-      padding: 3px 8px;
-      border-radius: 4px;
-      background: var(--border2);
-      color: var(--accent);
-      white-space: nowrap;
-    }
-
-    /* Mode toggles */
     .toggle-row {
       display: flex;
-      gap: 6px;
-      margin-top: 8px;
+      gap: 5px;
+      margin-bottom: 6px;
     }
     .toggle-btn {
       flex: 1;
-      padding: 4px 6px;
+      padding: 4px;
       border: 1px solid var(--border);
       border-radius: 5px;
       background: var(--bg);
@@ -156,16 +260,14 @@
       cursor: pointer;
       text-align: center;
     }
-    .toggle-btn.active { border-color: var(--accent); color: var(--accent); background: #121c27; }
+    .toggle-btn.active { border-color: var(--accent); color: var(--accent); background: #0f1c2e; }
 
-    /* Settings row */
     .settings-row {
       display: flex;
-      gap: 8px;
-      margin-top: 8px;
       align-items: center;
+      gap: 6px;
     }
-    .settings-row label { font-size: 11px; color: var(--muted); }
+    .settings-row label { font-size: 11px; color: var(--muted); white-space: nowrap; }
     .settings-row select {
       flex: 1;
       background: var(--bg);
@@ -176,7 +278,7 @@
       padding: 3px 6px;
     }
 
-    /* ── Summary scroll area ── */
+    /* Summary area */
     #summary-area {
       flex: 1;
       overflow-y: auto;
@@ -185,7 +287,6 @@
       scrollbar-color: var(--border2) transparent;
     }
 
-    /* Cards */
     .card {
       background: var(--surface);
       border: 1px solid var(--border2);
@@ -194,60 +295,57 @@
       margin-bottom: 8px;
     }
     .card-title {
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 700;
       color: var(--accent);
       text-transform: uppercase;
       letter-spacing: .05em;
-      padding-bottom: 6px;
-      margin-bottom: 8px;
+      padding-bottom: 5px;
+      margin-bottom: 7px;
       border-bottom: 1px solid var(--border2);
     }
-    .metric-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+    .metric-grid { display: flex; flex-wrap: wrap; gap: 5px; }
     .metric-box {
-      flex: 1;
-      min-width: 60px;
+      flex: 1; min-width: 55px;
       background: var(--bg);
       border: 1px solid var(--border2);
       border-radius: 5px;
-      padding: 6px 8px;
+      padding: 5px 7px;
       text-align: center;
     }
-    .metric-label { font-size: 10px; color: var(--muted); margin-bottom: 2px; }
-    .metric-value { font-size: 13px; font-weight: 700; }
+    .metric-label { font-size: 9px; color: var(--muted); margin-bottom: 2px; }
+    .metric-value { font-size: 12px; font-weight: 700; }
     .bull { color: var(--bull); }
     .bear { color: var(--bear); }
     .warn { color: var(--warn); }
 
-    .levels-row { display: flex; gap: 6px; margin-bottom: 8px; }
+    .levels-row { display: flex; gap: 5px; margin-bottom: 7px; }
     .level-item { flex: 1; }
-    .level-label { font-size: 10px; color: var(--muted); margin-bottom: 2px; }
-    .level-value { font-size: 13px; font-weight: 700; }
+    .level-label { font-size: 9px; color: var(--muted); margin-bottom: 2px; }
+    .level-value { font-size: 12px; font-weight: 700; }
 
-    .targets-list { list-style: none; margin-top: 6px; }
-    .targets-list li { padding: 2px 0; font-size: 12px; display: flex; justify-content: space-between; }
+    .targets-list { list-style: none; margin-top: 5px; }
+    .targets-list li { padding: 2px 0; font-size: 11px; display: flex; justify-content: space-between; }
     .targets-list li span { color: var(--bull); font-weight: 700; }
 
-    .key-levels-grid { display: flex; flex-wrap: wrap; gap: 4px 10px; }
-    .key-levels-grid .kl { font-size: 12px; }
-    .key-levels-grid .kl em { color: var(--muted); font-style: normal; }
+    .kl-grid { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+    .kl-grid .kl { font-size: 11px; }
+    .kl-grid .kl em { color: var(--muted); font-style: normal; }
 
-    .summary-text { font-size: 12px; color: var(--muted); line-height: 1.6; }
-
-    .exec-row { display: flex; gap: 6px; margin-bottom: 8px; }
+    .summary-text { font-size: 11px; color: var(--muted); line-height: 1.6; }
 
     .placeholder {
       text-align: center;
       color: var(--muted);
       font-size: 12px;
-      padding: 40px 16px;
-      line-height: 1.8;
+      padding: 36px 12px;
+      line-height: 1.9;
     }
     .placeholder strong { color: var(--text); }
 
-    /* token footer */
+    /* Token footer */
     #token-footer {
-      padding: 5px 12px;
+      padding: 4px 12px;
       font-size: 10px;
       color: var(--muted);
       border-top: 1px solid var(--border2);
@@ -255,199 +353,179 @@
       flex-shrink: 0;
     }
 
-    /* spinner overlay on panel */
+    /* Spinner */
     .spinner-overlay {
       display: none;
       position: absolute;
       inset: 0;
-      background: rgba(13,17,23,.7);
+      background: rgba(13,17,23,.75);
       align-items: center;
       justify-content: center;
-      z-index: 10;
-      border-radius: var(--radius);
+      z-index: 30;
     }
     .spinner-overlay.visible { display: flex; }
     .spinner {
-      width: 28px; height: 28px;
+      width: 26px; height: 26px;
       border: 3px solid var(--border);
       border-top-color: var(--accent);
       border-radius: 50%;
       animation: spin .7s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
-
-    #panel-col { position: relative; }
-
-    /* ── Timeframe bar (above chart) ── */
-    #tf-bar {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      padding: 5px 10px;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
-    }
-    #tf-bar span {
-      font-size: 10px;
-      color: var(--muted);
-      margin-right: 4px;
-      text-transform: uppercase;
-      letter-spacing: .05em;
-    }
-    .tf-btn {
-      padding: 3px 9px;
-      border: 1px solid var(--border2);
-      border-radius: 4px;
-      background: var(--bg);
-      color: var(--muted);
-      font-size: 11px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    .tf-btn:hover { border-color: var(--accent); color: var(--accent); }
-    .tf-btn.active { background: var(--accent); color: #0d1117; border-color: var(--accent); }
   </style>
 </head>
 <body>
+<div id="shell">
 
-<!-- ── Top bar ── -->
-<header>
-  <h1>📈 Trade Assistant</h1>
-  <span class="sep">|</span>
-  <div class="status-dot" id="status-dot"></div>
-  <span id="status-text">connecting…</span>
-</header>
+  <!-- ── Header ── -->
+  <header>
+    <h1>📈 Trade Assistant</h1>
+    <span class="sep">|</span>
+    <div class="status-dot" id="status-dot"></div>
+    <span id="status-text">connecting…</span>
+    <div class="spacer"></div>
+    <button id="btn-toggle-panel">
+      <span class="arrow" id="toggle-arrow">▶</span>
+      <span id="toggle-label">Hide Panel</span>
+    </button>
+  </header>
 
-<!-- ── Main ── -->
-<main>
+  <!-- ── Workspace ── -->
+  <div id="workspace">
 
-  <!-- Left: TradingView chart -->
-  <div id="chart-col" style="display:flex;flex-direction:column;">
-    <!-- Timeframe bar -->
-    <div id="tf-bar">
-      <span>TF</span>
-      <button class="tf-btn" data-tf="1">1m</button>
-      <button class="tf-btn" data-tf="3">3m</button>
-      <button class="tf-btn active" data-tf="5">5m</button>
-      <button class="tf-btn" data-tf="15">15m</button>
-      <button class="tf-btn" data-tf="30">30m</button>
-      <button class="tf-btn" data-tf="60">1h</button>
-      <button class="tf-btn" data-tf="240">4h</button>
-      <button class="tf-btn" data-tf="D">1D</button>
-      <button class="tf-btn" data-tf="W">1W</button>
-    </div>
-    <div class="tradingview-widget-container" style="flex:1;width:100%">
-      <div id="tv-widget" style="height:100%;width:100%"></div>
-    </div>
-  </div>
-
-  <!-- Right: symbol + summary -->
-  <div id="panel-col">
-
-    <!-- Spinner overlay -->
-    <div class="spinner-overlay" id="spinner">
-      <div class="spinner"></div>
+    <!-- Chart column -->
+    <div id="chart-col">
+      <div id="tf-bar">
+        <span class="tf-label">TF</span>
+        <button class="tf-btn" data-tf="1">1m</button>
+        <button class="tf-btn" data-tf="3">3m</button>
+        <button class="tf-btn active" data-tf="5">5m</button>
+        <button class="tf-btn" data-tf="15">15m</button>
+        <button class="tf-btn" data-tf="30">30m</button>
+        <button class="tf-btn" data-tf="60">1h</button>
+        <button class="tf-btn" data-tf="240">4h</button>
+        <button class="tf-btn" data-tf="D">1D</button>
+        <button class="tf-btn" data-tf="W">1W</button>
+      </div>
+      <div id="tv-container">
+        <div id="tv-widget"></div>
+      </div>
     </div>
 
-    <!-- Symbol bar -->
-    <div id="symbol-bar">
-      <label>Symbol</label>
-      <div class="sym-row">
-        <input id="sym-input" type="text" value="BTCUSDT" placeholder="BTCUSDT / RELIANCE / NIFTY" />
-        <span id="broker-badge">Delta</span>
-      </div>
-      <!-- Quick-select dropdown -->
-      <select id="sym-select" style="width:100%;margin-top:6px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:12px;padding:5px 8px;">
-        <optgroup label="── Crypto (Delta) ──">
-          <option value="BTCUSDT">BTC/USDT</option>
-          <option value="ETHUSDT">ETH/USDT</option>
-          <option value="SOLUSDT">SOL/USDT</option>
-          <option value="BNBUSDT">BNB/USDT</option>
-          <option value="XAUUSDT">XAU/USDT (Gold)</option>
-          <option value="DOGEUSDT">DOGE/USDT</option>
-          <option value="AVAXUSDT">AVAX/USDT</option>
-        </optgroup>
-        <optgroup label="── Indices (Fyers) ──">
-          <option value="NIFTY50">NIFTY 50</option>
-          <option value="BANKNIFTY">BANK NIFTY</option>
-          <option value="SENSEX">SENSEX</option>
-        </optgroup>
-        <optgroup label="── NSE Equities ──">
-          <option value="RELIANCE">RELIANCE</option>
-          <option value="TCS">TCS</option>
-          <option value="HDFCBANK">HDFC BANK</option>
-          <option value="ICICIBANK">ICICI BANK</option>
-          <option value="INFY">INFOSYS</option>
-          <option value="SBIN">SBI</option>
-          <option value="AXISBANK">AXIS BANK</option>
-          <option value="BAJAJFINANCE">BAJAJ FINANCE</option>
-          <option value="TATAMOTORS">TATA MOTORS</option>
-          <option value="WIPRO">WIPRO</option>
-          <option value="MARUTI">MARUTI</option>
-          <option value="ONGC">ONGC</option>
-          <option value="RBLBANK">RBL BANK</option>
-        </optgroup>
-      </select>
-      <div class="sym-row" style="margin-top:6px">
-        <button class="btn btn-primary" id="btn-analyse" style="flex:1">📊 Analyse</button>
-        <button class="btn btn-secondary" id="btn-execute" style="flex:1">⚡ Execute</button>
-      </div>
-      <div class="toggle-row">
-        <div class="toggle-btn active" id="mode-paper" data-mode="paper">Paper</div>
-        <div class="toggle-btn" id="mode-real" data-mode="real">Real</div>
-      </div>
-      <div class="settings-row">
-        <label>LLM</label>
-        <select id="llm-select">
-          <option value="openai">OpenAI</option>
-          <option value="ollama">Ollama</option>
+    <!-- Right panel -->
+    <div id="panel-col">
+      <div class="spinner-overlay" id="spinner"><div class="spinner"></div></div>
+
+      <!-- Symbol bar -->
+      <div id="symbol-bar">
+        <div class="bar-label">Symbol</div>
+        <div class="sym-row">
+          <input id="sym-input" type="text" value="BTCUSDT" placeholder="e.g. BTCUSDT, RELIANCE" />
+          <span id="broker-badge">Delta</span>
+        </div>
+
+        <select id="sym-select">
+          <option value="" disabled selected>Quick select…</option>
+          <optgroup label="── Crypto (Delta) ──">
+            <option value="BTCUSDT">BTC/USDT</option>
+            <option value="ETHUSDT">ETH/USDT</option>
+            <option value="SOLUSDT">SOL/USDT</option>
+            <option value="BNBUSDT">BNB/USDT</option>
+            <option value="XAUUSDT">XAU/USDT — Gold</option>
+            <option value="DOGEUSDT">DOGE/USDT</option>
+            <option value="AVAXUSDT">AVAX/USDT</option>
+            <option value="LINKUSDT">LINK/USDT</option>
+          </optgroup>
+          <optgroup label="── Indices (Fyers) ──">
+            <option value="NIFTY50">NIFTY 50</option>
+            <option value="BANKNIFTY">BANK NIFTY</option>
+            <option value="SENSEX">SENSEX</option>
+          </optgroup>
+          <optgroup label="── NSE Equities ──">
+            <option value="RELIANCE">RELIANCE</option>
+            <option value="TCS">TCS</option>
+            <option value="HDFCBANK">HDFC BANK</option>
+            <option value="ICICIBANK">ICICI BANK</option>
+            <option value="INFY">INFOSYS</option>
+            <option value="SBIN">SBI</option>
+            <option value="AXISBANK">AXIS BANK</option>
+            <option value="BAJAJFINANCE">BAJAJ FINANCE</option>
+            <option value="TATAMOTORS">TATA MOTORS</option>
+            <option value="WIPRO">WIPRO</option>
+            <option value="MARUTI">MARUTI</option>
+            <option value="ONGC">ONGC</option>
+            <option value="RBLBANK">RBL BANK</option>
+          </optgroup>
         </select>
+
+        <div class="action-row">
+          <button class="btn btn-primary"   id="btn-analyse">📊 Analyse</button>
+          <button class="btn btn-secondary" id="btn-execute">⚡ Execute</button>
+        </div>
+
+        <div class="toggle-row">
+          <div class="toggle-btn active" data-mode="paper">Paper</div>
+          <div class="toggle-btn"        data-mode="real">Real</div>
+        </div>
+
+        <div class="settings-row">
+          <label>LLM</label>
+          <select id="llm-select">
+            <option value="openai">OpenAI</option>
+            <option value="ollama">Ollama</option>
+          </select>
+        </div>
+      </div><!-- /symbol-bar -->
+
+      <!-- Analysis summary -->
+      <div id="summary-area">
+        <div class="placeholder">
+          Select a symbol and click<br><strong>Analyse</strong> to load the trade setup.
+        </div>
       </div>
-    </div>
 
-    <!-- Summary scroll area -->
-    <div id="summary-area">
-      <div class="placeholder" id="placeholder">
-        Enter a symbol above and click<br>
-        <strong>Analyse</strong> to load the trade setup.
-      </div>
-    </div>
+      <div id="token-footer">Tokens: —</div>
+    </div><!-- /panel-col -->
 
-    <!-- Token footer -->
-    <div id="token-footer">Tokens: —</div>
-  </div>
-
-</main>
+  </div><!-- /workspace -->
+</div><!-- /shell -->
 
 <script>
+/* ═══════════════════════════════════════════════════════════════
+   State
+═══════════════════════════════════════════════════════════════ */
 const API = 'http://localhost:8100';
-let sessionId  = null;
-let tradeMode  = 'paper';
+let sessionId   = null;
+let tradeMode   = 'paper';
 let totalTokens = 0;
-let currentTf  = '5';   // default 5 min
+let currentTf   = '5';
+let panelVisible = true;
 
-// ── Symbol helpers ──────────────────────────────────────────────────────────
+/* ═══════════════════════════════════════════════════════════════
+   Symbol helpers
+═══════════════════════════════════════════════════════════════ */
 const DELTA_MAP = {
   BTC:'BTCUSDT', ETH:'ETHUSDT', SOL:'SOLUSDT', BNB:'BNBUSDT',
-  XAU:'XAUUSDT', DOGE:'DOGEUSDT', AVAX:'AVAXUSDT', MATIC:'MATICUSDT',
-  LINK:'LINKUSDT',
+  XAU:'XAUUSDT', DOGE:'DOGEUSDT', AVAX:'AVAXUSDT',
+  MATIC:'MATICUSDT', LINK:'LINKUSDT',
 };
 const DELTA_SYMS = new Set([...Object.keys(DELTA_MAP), ...Object.values(DELTA_MAP)]);
-const NSE_TV = { NIFTY:'NSE:NIFTY', NIFTY50:'NSE:NIFTY', BANKNIFTY:'NSE:BANKNIFTY', SENSEX:'BSE:SENSEX' };
+const NSE_TV = {
+  NIFTY:'NSE:NIFTY', NIFTY50:'NSE:NIFTY',
+  BANKNIFTY:'NSE:BANKNIFTY', SENSEX:'BSE:SENSEX',
+};
 
 function detectBroker(raw) {
   const s = raw.toUpperCase().replace(/\.P$/, '');
   if (DELTA_SYMS.has(s) || s.endsWith('USDT') || s.endsWith('PERP')) return 'delta';
-  if (DELTA_MAP[s]) return 'delta';
   return 'fyers';
 }
 
 function toTVSymbol(raw) {
   const s = raw.toUpperCase().replace(/\.P$/, '');
-  if (NSE_TV[s])      return NSE_TV[s];
-  if (DELTA_MAP[s])   return `BINANCE:${DELTA_MAP[s]}`;
-  if (s.endsWith('USDT')) return `BINANCE:${s}`;
+  if (NSE_TV[s])           return NSE_TV[s];
+  if (DELTA_MAP[s])        return `BINANCE:${DELTA_MAP[s]}`;
+  if (s.endsWith('USDT'))  return `BINANCE:${s}`;
   return `NSE:${s}`;
 }
 
@@ -456,46 +534,75 @@ function toBackendSymbol(raw) {
   return DELTA_MAP[s] || s;
 }
 
-// ── TradingView widget ──────────────────────────────────────────────────────
-// Use the widget JS API (not the embed script) so the iframe is created ONCE.
-// Changing symbol/interval calls widget.setSymbol() — drawings are preserved.
+function updateBadge(raw) {
+  const broker = detectBroker(raw);
+  brokerBadge.textContent = broker === 'delta' ? 'Delta' : 'Fyers NSE';
+  brokerBadge.style.color = broker === 'delta' ? '#60a5fa' : '#34d399';
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TradingView — full widget, created once, updated via API
+═══════════════════════════════════════════════════════════════ */
 let tvWidget = null;
-let tvLibLoaded = false;
 
 function loadTVLib(cb) {
-  if (tvLibLoaded) { cb(); return; }
+  if (window.TradingView) { cb(); return; }
   const s = document.createElement('script');
   s.src = 'https://s3.tradingview.com/tv.js';
-  s.onload = () => { tvLibLoaded = true; cb(); };
+  s.onload = cb;
   document.head.appendChild(s);
 }
 
 function initChart(tvSym) {
   loadTVLib(() => {
     tvWidget = new TradingView.widget({
+      /* container */
       container_id: 'tv-widget',
       autosize: true,
-      symbol: tvSym,
+
+      /* symbol & interval */
+      symbol:   tvSym,
       interval: currentTf,
-      timezone: 'Asia/Kolkata',
-      theme: 'dark',
-      style: '1',
-      locale: 'in',
-      withdateranges: true,
+
+      /* locale & appearance */
+      timezone:  'Asia/Kolkata',
+      theme:     'dark',
+      style:     '1',
+      locale:    'in',
+
+      /* toolbars — show everything */
+      hide_top_toolbar:  false,
       hide_side_toolbar: false,
+      hide_legend:       false,
+      withdateranges:    true,
+
+      /* symbol interaction */
       allow_symbol_change: true,
+
+      /* feature flags — enable full feature set */
+      enabled_features: [
+        'study_templates',
+        'use_localstorage_for_settings',
+        'save_chart_properties_to_local_storage',
+        'create_volume_indicator_by_default',
+        'header_saveload',
+        'header_screenshot',
+        'header_undo_redo',
+        'show_chart_property_page',
+        'display_market_status',
+        'show_trading_notifications_history',
+        'side_toolbar_in_fullscreen_mode',
+      ],
+      disabled_features: [],
+
+      /* support */
       support_host: 'https://www.tradingview.com',
     });
   });
 }
 
 function updateChart(tvSym) {
-  if (!tvWidget || !tvWidget.iframe) {
-    // Widget not ready yet — (re)init
-    initChart(tvSym);
-    return;
-  }
-  // Use the widget API to update symbol + interval without destroying the iframe
+  if (!tvWidget) { initChart(tvSym); return; }
   tvWidget.onChartReady(() => {
     tvWidget.activeChart().setSymbol(tvSym, () => {
       tvWidget.activeChart().setResolution(currentTf);
@@ -503,74 +610,81 @@ function updateChart(tvSym) {
   });
 }
 
-// ── Backend health + session init ──────────────────────────────────────────
+/* ═══════════════════════════════════════════════════════════════
+   Panel toggle
+═══════════════════════════════════════════════════════════════ */
+const panelCol    = document.getElementById('panel-col');
+const toggleBtn   = document.getElementById('btn-toggle-panel');
+const toggleArrow = document.getElementById('toggle-arrow');
+const toggleLabel = document.getElementById('toggle-label');
+
+toggleBtn.addEventListener('click', () => {
+  panelVisible = !panelVisible;
+  panelCol.classList.toggle('hidden', !panelVisible);
+  toggleArrow.textContent = panelVisible ? '▶' : '◀';
+  toggleLabel.textContent = panelVisible ? 'Hide Panel' : 'Show Panel';
+  // Nudge the TV widget to reflow after transition
+  setTimeout(() => {
+    if (tvWidget && tvWidget.iframe) {
+      tvWidget.iframe.style.width  = '100%';
+      tvWidget.iframe.style.height = '100%';
+    }
+  }, 260);
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   Backend init
+═══════════════════════════════════════════════════════════════ */
 async function initSession() {
   try {
-    const h = await fetch(`${API}/health`);
-    if (!h.ok) throw new Error(`HTTP ${h.status}`);
-    const dot  = document.getElementById('status-dot');
-    const text = document.getElementById('status-text');
-    dot.classList.add('ok');
-    text.textContent = 'Backend connected';
+    const r = await fetch(`${API}/health`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    document.getElementById('status-dot').classList.add('ok');
+    document.getElementById('status-text').textContent = 'Backend connected';
   } catch (e) {
-    const dot  = document.getElementById('status-dot');
-    const text = document.getElementById('status-text');
-    dot.classList.add('err');
-    text.textContent = `Backend offline — ${e.message}`;
+    document.getElementById('status-dot').classList.add('err');
+    document.getElementById('status-text').textContent = `Offline — ${e.message}`;
   }
-
-  // Create a session (no auth needed)
   try {
-    const r = await fetch(`${API}/sessions/new`, { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' });
-    if (r.ok) {
-      const d = await r.json();
-      sessionId = d.session_id;
-    }
+    const r = await fetch(`${API}/sessions/new`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    if (r.ok) sessionId = (await r.json()).session_id;
   } catch (_) {}
 }
 
-// ── Symbol input → broker badge live update ──────────────────────────────
+/* ═══════════════════════════════════════════════════════════════
+   Symbol input & dropdown
+═══════════════════════════════════════════════════════════════ */
 const symInput    = document.getElementById('sym-input');
 const brokerBadge = document.getElementById('broker-badge');
 
-symInput.addEventListener('input', () => {
-  const broker = detectBroker(symInput.value || 'BTCUSDT');
-  if (broker === 'delta') {
-    brokerBadge.textContent = 'Delta';
-    brokerBadge.style.color = '#60a5fa';
-  } else {
-    brokerBadge.textContent = 'Fyers (NSE)';
-    brokerBadge.style.color = '#34d399';
-  }
-});
-
+symInput.addEventListener('input', () => updateBadge(symInput.value || 'BTCUSDT'));
 symInput.addEventListener('keydown', e => {
   if (e.key === 'Enter') document.getElementById('btn-analyse').click();
 });
 
-// ── Timeframe buttons ────────────────────────────────────────────────────
+document.getElementById('sym-select').addEventListener('change', function () {
+  symInput.value = this.value;
+  updateBadge(this.value);
+  updateChart(toTVSymbol(this.value));
+  this.value = '';   // reset dropdown so it can be re-selected
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   Timeframe buttons
+═══════════════════════════════════════════════════════════════ */
 document.querySelectorAll('.tf-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentTf = btn.dataset.tf;
-    updateChart(toTVSymbol(document.getElementById('sym-input').value || 'BTCUSDT'));
+    updateChart(toTVSymbol(symInput.value || 'BTCUSDT'));
   });
 });
 
-// ── Symbol dropdown ───────────────────────────────────────────────────────
-document.getElementById('sym-select').addEventListener('change', function() {
-  const val = this.value;
-  symInput.value = val;
-  // Update broker badge
-  const broker = detectBroker(val);
-  brokerBadge.textContent = broker === 'delta' ? 'Delta' : 'Fyers (NSE)';
-  brokerBadge.style.color = broker === 'delta' ? '#60a5fa' : '#34d399';
-  // Update chart immediately
-  updateChart(toTVSymbol(val));
-});
-
-// ── Trade mode toggles ───────────────────────────────────────────────────
+/* ═══════════════════════════════════════════════════════════════
+   Trade mode toggles
+═══════════════════════════════════════════════════════════════ */
 document.querySelectorAll('.toggle-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
@@ -579,7 +693,9 @@ document.querySelectorAll('.toggle-btn').forEach(btn => {
   });
 });
 
-// ── Analyse / Execute ─────────────────────────────────────────────────────
+/* ═══════════════════════════════════════════════════════════════
+   Analyse / Execute
+═══════════════════════════════════════════════════════════════ */
 document.getElementById('btn-analyse').addEventListener('click', () => runAction('analyse'));
 document.getElementById('btn-execute').addEventListener('click', () => runAction('execute'));
 
@@ -588,29 +704,22 @@ async function runAction(type) {
   const sym    = toBackendSymbol(raw);
   const tvSym  = toTVSymbol(raw);
   const llm    = document.getElementById('llm-select').value;
-  const intent = type === 'analyse' ? 'Analyse' : 'Execute trade on';
-  const msg    = `${intent} ${sym} for intraday trade`;
+  const msg    = `${type === 'analyse' ? 'Analyse' : 'Execute trade on'} ${sym} for intraday trade`;
 
-  // Update chart for new symbol (preserves drawings)
   updateChart(tvSym);
-
-  // Disable buttons + show spinner
   setLoading(true);
 
   try {
-    const body = {
-      message:      msg,
-      session_id:   sessionId || 'default',
-      llm_provider: llm,
-      trade_mode:   tradeMode,
-    };
-
     const r = await fetch(`${API}/chat`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(body),
+      body: JSON.stringify({
+        message:      msg,
+        session_id:   sessionId || 'default',
+        llm_provider: llm,
+        trade_mode:   tradeMode,
+      }),
     });
-
     const data = r.ok ? await r.json() : null;
     if (data) {
       totalTokens += data.tokens_used || 0;
@@ -633,44 +742,40 @@ function setLoading(on) {
   document.getElementById('btn-execute').disabled = on;
 }
 
-// ── Render summary cards ──────────────────────────────────────────────────
+/* ═══════════════════════════════════════════════════════════════
+   Summary cards
+═══════════════════════════════════════════════════════════════ */
 function renderError(msg) {
   document.getElementById('summary-area').innerHTML =
-    `<div class="placeholder" style="color:var(--bear)">❌ Error: ${esc(msg)}</div>`;
+    `<div class="placeholder" style="color:var(--bear)">❌ ${esc(msg)}</div>`;
 }
 
-function renderSummary(a, e, displaySym) {
+function renderSummary(a, e, sym) {
   const area = document.getElementById('summary-area');
   area.innerHTML = '';
 
   if (!a || !Object.keys(a).length) {
-    area.innerHTML = `<div class="placeholder">No analysis data returned.<br>Check the backend logs.</div>`;
+    area.innerHTML = `<div class="placeholder">No analysis returned.<br>Check backend logs.</div>`;
     return;
   }
 
-  const trend    = (a.trend || '—').toUpperCase();
-  const tClass   = /BULL|UP/.test(trend) ? 'bull' : /BEAR|DOWN/.test(trend) ? 'bear' : 'warn';
-  const tIcon    = tClass === 'bull' ? '↑' : tClass === 'bear' ? '↓' : '→';
+  const trend  = (a.trend || '—').toUpperCase();
+  const tCls   = /BULL|UP/.test(trend) ? 'bull' : /BEAR|DOWN/.test(trend) ? 'bear' : 'warn';
+  const tIcon  = tCls === 'bull' ? '↑' : tCls === 'bear' ? '↓' : '→';
 
-  // Card 1 — overview
-  area.appendChild(card('📊 Trade Setup — ' + (a.symbol || displaySym), `
+  area.appendChild(card('📊 Setup — ' + (a.symbol || sym), `
     <div class="metric-grid">
-      ${metricBox('Trend',      `<span class="${tClass}">${trend} ${tIcon}</span>`)}
-      ${metricBox('Strength',   esc(a.strength || '—'))}
-      ${metricBox('Price',      esc(a.last_price || '—'))}
-      ${metricBox('Confidence', esc(a.confidence || '—'))}
-    </div>
-  `));
+      ${mb('Trend',      `<span class="${tCls}">${trend} ${tIcon}</span>`)}
+      ${mb('Strength',   esc(a.strength   || '—'))}
+      ${mb('Price',      esc(a.last_price || '—'))}
+      ${mb('Conf',       esc(a.confidence || '—'))}
+    </div>`));
 
-  // Card 2 — levels
   const targets = Array.isArray(a.targets) ? a.targets : [];
-  const tItems  = targets.map((t,i) =>
-    `<li>T${i+1} <span>${esc(String(t))}</span></li>`).join('') || '<li>—</li>';
-
   area.appendChild(card('🎯 Levels', `
     <div class="levels-row">
       <div class="level-item">
-        <div class="level-label">ENTRY ZONE</div>
+        <div class="level-label">ENTRY</div>
         <div class="level-value warn">${esc(String(a.entry_zone || '—'))}</div>
       </div>
       <div class="level-item">
@@ -682,51 +787,47 @@ function renderSummary(a, e, displaySym) {
         <div class="level-value bull">${esc(String(a.rr_ratio || '—'))}</div>
       </div>
     </div>
-    <div class="level-label" style="margin-bottom:4px">TARGETS</div>
-    <ul class="targets-list">${tItems}</ul>
-  `));
+    <div class="level-label" style="margin-bottom:3px">TARGETS</div>
+    <ul class="targets-list">
+      ${targets.map((t, i) => `<li>T${i+1} <span>${esc(String(t))}</span></li>`).join('') || '<li>—</li>'}
+    </ul>`));
 
-  // Card 3 — key levels (optional)
   const kl = a.key_levels;
   if (kl && typeof kl === 'object' && Object.keys(kl).length) {
-    const klHtml = Object.entries(kl)
-      .map(([k,v]) => `<div class="kl"><em>${esc(k)}:</em> <strong>${esc(String(v))}</strong></div>`)
-      .join('');
-    area.appendChild(card('📐 Key Levels', `<div class="key-levels-grid">${klHtml}</div>`));
+    area.appendChild(card('📐 Key Levels', `
+      <div class="kl-grid">
+        ${Object.entries(kl).map(([k,v]) =>
+          `<div class="kl"><em>${esc(k)}:</em> <strong>${esc(String(v))}</strong></div>`
+        ).join('')}
+      </div>`));
   }
 
-  // Card 4 — summary text
-  if (a.summary) {
+  if (a.summary)
     area.appendChild(card('💬 Analysis', `<div class="summary-text">${esc(a.summary)}</div>`));
-  }
 
-  // Card 5 — execution (if present)
   if (e && Object.keys(e).length) {
     const action = (e.action || '—').toUpperCase();
-    const aClass = /BUY|LONG/.test(action) ? 'bull' : 'bear';
+    const aCls   = /BUY|LONG/.test(action) ? 'bull' : 'bear';
     const mode   = (e.mode || 'paper').toUpperCase();
-    const mColor = mode === 'REAL' ? 'var(--bear)' : 'var(--bull)';
-    area.appendChild(card('⚡ Execution Plan', `
-      <div class="metric-grid" style="margin-bottom:8px">
-        ${metricBox('Action',     `<span class="${aClass}">${esc(action)}</span>`)}
-        ${metricBox('Qty',        esc(String(e.qty || '—')))}
-        ${metricBox('Order',      esc(e.order_type || '—'))}
-        ${metricBox('Mode',       `<span style="color:${mColor}">${esc(mode)}</span>`)}
+    area.appendChild(card('⚡ Execution', `
+      <div class="metric-grid" style="margin-bottom:7px">
+        ${mb('Action', `<span class="${aCls}">${esc(action)}</span>`)}
+        ${mb('Qty',    esc(String(e.qty || '—')))}
+        ${mb('Order',  esc(e.order_type || '—'))}
+        ${mb('Mode',   `<span style="color:${mode==='REAL'?'var(--bear)':'var(--bull)'}">${esc(mode)}</span>`)}
       </div>
-      ${e.rationale ? `<div class="summary-text">${esc(e.rationale)}</div>` : ''}
-    `));
+      ${e.rationale ? `<div class="summary-text">${esc(e.rationale)}</div>` : ''}`));
   }
 }
 
-// ── DOM helpers ───────────────────────────────────────────────────────────
-function card(title, bodyHtml) {
+function card(title, body) {
   const d = document.createElement('div');
   d.className = 'card';
-  d.innerHTML = `<div class="card-title">${esc(title)}</div>${bodyHtml}`;
+  d.innerHTML = `<div class="card-title">${esc(title)}</div>${body}`;
   return d;
 }
 
-function metricBox(label, valueHtml) {
+function mb(label, valueHtml) {
   return `<div class="metric-box">
     <div class="metric-label">${esc(label)}</div>
     <div class="metric-value">${valueHtml}</div>
@@ -739,7 +840,9 @@ function esc(s) {
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ── Boot ──────────────────────────────────────────────────────────────────
+/* ═══════════════════════════════════════════════════════════════
+   Boot
+═══════════════════════════════════════════════════════════════ */
 initSession();
 initChart(toTVSymbol(symInput.value));
 </script>
