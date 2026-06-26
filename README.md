@@ -7,32 +7,75 @@ A ChatGPT-style trading assistant that analyses markets, identifies demand/suppl
 ## Quick Start
 
 ```bash
-# 1. Clone and install
 cd trade_assistant
 pip install -r requirements.txt
+cp .env.example .env   # add your API keys
 
-# 2. Configure credentials
-cp .env.example .env
-# Edit .env — add OPENAI_API_KEY, DELTA_API_KEY, FYERS_CLIENT_ID etc.
-
-# 3. Start all services
+# Start all services
 python start.py
 ```
 
-Open **http://localhost:8501**
+| URL | What opens |
+|---|---|
+| http://localhost:8501 | Chat UI |
+| http://localhost:8100/docs | Swagger API docs |
 
 ---
 
-## What it can do
+## Start Commands
 
-| Ask | What happens |
-|---|---|
-| *"Analyse RBLBANK for intraday"* | Fetches 15m Fyers data → S&D zones, BOS/CHoCH, LLM analysis |
-| *"Demand/supply zones of BTCUSDT in 15m"* | Fetches Delta candles → ICT/SMC analysis |
-| *"Swing trade setup for Reliance"* | 1h candles + perpetual metrics + news |
-| *"Execute trade on ETH"* | Analysis → bracket order via Delta MCP (paper/real) |
-| *"Canara Bank YoY profit?"* | Tavily web search → grounded LLM answer |
-| *"What is the PE ratio of HDFC Bank?"* | Web search → current data, not stale training |
+### All services (recommended)
+
+```bash
+python start.py
+```
+
+Starts 4 services in order:
+1. **Analysis Agent** → `:8101`
+2. **Execution Agent** → `:8102`
+3. **FastAPI Gateway** → `:8100`
+4. **Streamlit UI** → `:8501`
+
+### Manual (separate terminals)
+
+```bash
+# Terminal 1 — Analysis Agent (A2A service, port 8101)
+python -m services.analysis_agent_service --port 8101
+
+# Terminal 2 — Execution Agent (A2A service, port 8102)
+python -m services.execution_agent_service --port 8102
+
+# Terminal 3 — FastAPI Gateway (port 8100)
+uvicorn backend.main:app --host 0.0.0.0 --port 8100 --reload
+
+# Terminal 4 — Streamlit Chat UI (port 8501)
+streamlit run frontend/app.py --server.port 8501
+```
+
+### MCP Servers (spawned automatically — run manually for testing)
+
+```bash
+python -m mcp_servers.delta_server    # Delta Exchange tools (candles, orders)
+python -m mcp_servers.fyers_server    # Fyers NSE/BSE tools (candles, orders)
+python -m mcp_servers.tavily_server   # News search (Google RSS fallback)
+```
+
+### Verify all services are running
+
+```bash
+curl http://localhost:8100/health
+curl http://localhost:8101/.well-known/agent.json
+curl http://localhost:8102/.well-known/agent.json
+```
+
+Expected responses:
+```json
+{"status": "ok", "version": "1.0.0"}
+{"name": "analysis_agent", "url": "http://0.0.0.0:8101", "capabilities": ["task"]}
+{"name": "execution_agent", "url": "http://0.0.0.0:8102", "capabilities": ["task"]}
+```
+
+> **Note:** The gateway (:8100) has an in-process fallback — if :8101 is down, analysis runs inside the main process automatically.
 
 ---
 
@@ -46,42 +89,39 @@ FastAPI Gateway :8100
       │
       ├── OrchestratorAgent (intent routing + LLM)
       │       │
-      │       ├──► A2A HTTP → Analysis Agent Service :8101
-      │       │       └── Fetches candles/metrics via MCP servers
-      │       │           (falls back in-process if :8101 is down)
+      │       ├── A2A HTTP ──► Analysis Agent :8101
+      │       │                   └── MCP stdio ──► delta/fyers/tavily servers
+      │       │                   (fallback: runs in-process if :8101 is down)
       │       │
-      │       ├──► A2A HTTP → Execution Agent Service :8102
-      │       │       └── Places bracket orders via MCP servers
+      │       ├── A2A HTTP ──► Execution Agent :8102
+      │       │                   └── MCP stdio ──► delta/fyers servers
       │       │
-      │       └──► Tavily MCP → web search (research intent)
+      │       └── Tavily MCP ──► web search (research intent only)
       │
       └── Auth (JWT + SQLite sessions)
-
-MCP Servers (stdio subprocess per call):
-  mcp_servers/delta_server.py   — candles, perp metrics, orders
-  mcp_servers/fyers_server.py   — candles, quotes, orders
-  mcp_servers/tavily_server.py  — news search + Google RSS fallback
 ```
+
+**Intent routing:**
+| User message | Route |
+|---|---|
+| "Analyse RBLBANK for intraday" | → AnalysisAgent (:8101) |
+| "Execute trade on BTCUSDT" | → AnalysisAgent then ExecutionAgent (:8102) |
+| "What is Canara Bank YoY profit?" | → Tavily MCP web search → LLM |
+| "Hello / general questions" | → LLM directly |
 
 ---
 
-## Services
+## Services & Ports
 
-| Service | Port | Start command |
-|---|---|---|
-| FastAPI Gateway | 8100 | `uvicorn backend.main:app --port 8100` |
-| Analysis Agent | 8101 | `python -m services.analysis_agent_service` |
-| Execution Agent | 8102 | `python -m services.execution_agent_service` |
-| Streamlit UI | 8501 | `streamlit run frontend/app.py` |
-
-**Start all at once:** `python start.py`
-
-**Verify services are up:**
-```bash
-curl http://localhost:8100/health
-curl http://localhost:8101/.well-known/agent.json
-curl http://localhost:8102/.well-known/agent.json
-```
+| Service | Port | File | Description |
+|---|---|---|---|
+| FastAPI Gateway | 8100 | `backend/main.py` | Chat, auth, Fyers token endpoints |
+| Analysis Agent | 8101 | `services/analysis_agent_service.py` | Market data + LLM analysis |
+| Execution Agent | 8102 | `services/execution_agent_service.py` | Trade plan + order placement |
+| Streamlit UI | 8501 | `frontend/app.py` | Chat interface |
+| Delta MCP | stdio | `mcp_servers/delta_server.py` | Auto-spawned per call |
+| Fyers MCP | stdio | `mcp_servers/fyers_server.py` | Auto-spawned per call |
+| Tavily MCP | stdio | `mcp_servers/tavily_server.py` | Auto-spawned per call |
 
 ---
 
@@ -90,18 +130,18 @@ curl http://localhost:8102/.well-known/agent.json
 ```bash
 # LLM
 OPENAI_API_KEY=sk-...
-DEFAULT_LLM_PROVIDER=openai       # openai | ollama
+DEFAULT_LLM_PROVIDER=openai        # openai | ollama
 OLLAMA_BASE_URL=http://localhost:11434
 
-# Delta Exchange (crypto)
+# Delta Exchange
 DELTA_API_KEY=...
 DELTA_API_SECRET=...
 DELTA_REGION=global
 
-# Fyers (NSE/BSE equities)
-FYERS_CLIENT_ID=...               # e.g. OYTP8YTH2B-100
-FYERS_ACCESS_TOKEN=eyJ...         # expires daily — see Token Refresh below
-FYERS_SECRET_KEY=...              # needed for token generation
+# Fyers (token expires daily — see Token Refresh below)
+FYERS_CLIENT_ID=...
+FYERS_ACCESS_TOKEN=eyJ...
+FYERS_SECRET_KEY=...               # needed for token generation
 
 # Tavily (optional — falls back to Google RSS)
 TAVILY_API_KEY=tvly-...
@@ -112,68 +152,54 @@ LANGSMITH_API_KEY=...
 LANGSMITH_PROJECT=trade-assistant
 
 # Auth
-SECRET_KEY=your-secret-key-32-chars-min
+SECRET_KEY=change-me-32-chars-min
 ```
 
 ---
 
 ## Fyers Token Refresh
 
-Fyers access tokens **expire every day at midnight IST**. Refresh daily before trading:
+Fyers access tokens **expire every day at midnight IST**. Refresh daily before trading.
 
-**Step 1** — Get the OAuth login URL:
+**Step 1** — Get the login URL:
+```bash
+curl http://localhost:8100/fyers/login-url
 ```
-GET http://localhost:8100/fyers/login-url
-```
-Open the `login_url` in your browser, login, copy the `code=` value from the redirect URL.
+Open the `login_url` in your browser, login, copy the `code=` from the redirect URL.
 
-**Step 2** — Exchange for a new token (auto-updates `.env`):
+**Step 2** — Exchange code for token (auto-updates `.env`):
 ```bash
 curl -X POST http://localhost:8100/fyers/generate-token \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"auth_code": "PASTE_CODE_HERE"}'
 ```
 
-**Check current token status:**
+**Check token status:**
+```bash
+curl http://localhost:8100/fyers/auth-status
+# → {"authenticated": true, "expires_at": "2026-06-24 00:30 UTC", "expired": false}
 ```
-GET http://localhost:8100/fyers/auth-status
-```
-Returns: `{"authenticated": true/false, "expires_at": "2026-06-23 00:30 UTC", "expired": false}`
-
----
-
-## Supported Symbols
-
-**Delta Exchange (crypto):**
-`BTCUSDT`, `ETHUSDT`, `XAUUSDT`, `SOLUSDT`, `BNBUSDT`
-
-**Fyers (NSE equities):**
-`NIFTY50`, `BANKNIFTY`, `RELIANCE`, `TCS`, `SBIN`, `HDFCBANK`, `ICICIBANK`,
-`AXISBANK`, `CANBK` (Canara Bank), `PNB`, `BANKBARODA`, `INFY`, `WIPRO`,
-`TATAMOTORS`, `MARUTI`, `BAJAJFINANCE`, `SUNPHARMA`, `ONGC`, `NTPC`,
-`LT`, `ADANIPORTS`, `RBLBANK`, and more
 
 ---
 
 ## API Reference
 
-### Core
+### Chat & Sessions
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/auth/register` | Create account |
+| `POST` | `/auth/register` | Create account `{"username":"...", "password":"..."}` |
 | `POST` | `/auth/login` | Login → JWT token |
-| `POST` | `/chat` | Send message → routed to agents |
-| `POST` | `/sessions/new` | Create chat session |
+| `POST` | `/chat` | Send message → agent response |
+| `POST` | `/sessions/new` | Start new chat session |
 | `GET` | `/sessions` | List your sessions |
-| `GET` | `/sessions/{id}/messages` | Load chat history |
+| `GET` | `/sessions/{id}/messages` | Load chat history + token count |
 
-### Fyers
+### Fyers Token
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/fyers/auth-status` | Check token validity + expiry |
+| `GET` | `/fyers/auth-status` | Check token validity + JWT expiry |
 | `GET` | `/fyers/login-url` | Get OAuth login URL |
-| `POST` | `/fyers/generate-token` | Exchange auth code → token + update .env |
+| `POST` | `/fyers/generate-token` | Exchange auth code → update .env |
 
 ### Meta
 | Method | Endpoint | Description |
@@ -184,18 +210,30 @@ Returns: `{"authenticated": true/false, "expires_at": "2026-06-23 00:30 UTC", "e
 
 ---
 
+## Supported Symbols
+
+**Delta Exchange (crypto):**
+`BTCUSDT`, `ETHUSDT`, `XAUUSDT` (Gold), `SOLUSDT`, `BNBUSDT`
+
+**Fyers (NSE equities):**
+`NIFTY50`, `BANKNIFTY`, `RELIANCE`, `TCS`, `SBIN`, `HDFCBANK`, `ICICIBANK`,
+`AXISBANK`, `CANBK` (Canara), `PNB`, `BANKBARODA`, `INFY`, `WIPRO`,
+`TATAMOTORS`, `MARUTI`, `BAJAJFINANCE`, `SUNPHARMA`, `ONGC`, `NTPC`,
+`LT`, `ADANIPORTS`, `RBLBANK`, `IDBI` and more
+
+---
+
 ## Features
 
-- **ChatGPT-style UI** — session history, multiple conversations, dark theme
-- **JWT auth** — login/register with username + password, sessions saved to SQLite
-- **Live token counter** — shows tokens used + estimated cost per session
-- **LLM selection** — OpenAI gpt-4o-mini or Ollama (llama3.2) per session
-- **Paper / Real trade mode** — paper simulates, real places bracket orders
+- **ChatGPT-style UI** with session history and multiple conversations
+- **JWT auth** — login/register, sessions saved to SQLite
+- **Token counter** — live tokens used + estimated OpenAI cost
+- **LLM selection** — OpenAI gpt-4o-mini or Ollama per session
+- **Paper / Real** trade mode toggle
 - **4 intent types** — analyse, execute, research (web search), chat
-- **In-process fallback** — analysis works even when :8101 service is down
+- **In-process fallback** — works even if agent services are down
+- **Decoupled agents** — LLM provider injected per request, no config coupling
 - **LangSmith tracing** — trace all agent calls (set `LANGCHAIN_TRACING_V2=true`)
-- **Graceful auth errors** — clear message when Fyers token is expired
-- **Decoupled agents** — LLM provider injected per-request, no config coupling
 
 ---
 
@@ -203,40 +241,39 @@ Returns: `{"authenticated": true/false, "expires_at": "2026-06-23 00:30 UTC", "e
 
 ```
 trade_assistant/
-├── start.py                     ← Start all services
+├── start.py                         ← Start all 4 services
 ├── requirements.txt
 ├── .env.example
-├── mcp_servers/                 ← MCP tool servers (stdio)
-│   ├── delta_server.py          (8 tools: candles, metrics, orders)
-│   ├── fyers_server.py          (7 tools: candles, quotes, orders)
-│   └── tavily_server.py         (3 tools: news search)
-├── backend/
-│   ├── main.py                  ← FastAPI :8100 + auth + fyers token endpoints
-│   ├── config.py                ← Settings (absolute .env path)
-│   ├── protocol.py              ← A2A Task / TaskResponse / Artifact
-│   ├── a2a/
-│   │   ├── server.py            ← A2AServer (wraps any agent as HTTP)
-│   │   └── client.py            ← A2AClient (async httpx with fallback)
-│   ├── agents/
-│   │   ├── orchestrator.py      ← Intent routing + A2A dispatch + fallback
-│   │   ├── analysis_agent.py    ← MCP data fetch + LLM analysis (stateless)
-│   │   └── execution_agent.py   ← LLM execution plan + MCP orders (stateless)
-│   ├── auth/store.py            ← SQLite users + JWT + sessions + messages
-│   ├── brokers/
-│   │   ├── delta/               ← DeltaSource + DeltaExecutor
-│   │   └── fyers/               ← FyersSource
-│   ├── llm/factory.py           ← LLMFactory (OpenAI / Ollama)
-│   └── mcp/connector.py         ← call_mcp_tool() one-shot helper
+├── mcp_servers/
+│   ├── delta_server.py              ← 8 tools: candles, metrics, orders
+│   ├── fyers_server.py              ← 7 tools: candles, quotes, orders
+│   └── tavily_server.py             ← 3 tools: news search
 ├── services/
-│   ├── analysis_agent_service.py  ← A2A service wrapper :8101
-│   └── execution_agent_service.py ← A2A service wrapper :8102
+│   ├── analysis_agent_service.py    ← A2A wrapper :8101
+│   └── execution_agent_service.py   ← A2A wrapper :8102
+├── backend/
+│   ├── main.py                      ← FastAPI :8100
+│   ├── config.py                    ← Settings (absolute .env path)
+│   ├── protocol.py                  ← Task / TaskResponse / Artifact
+│   ├── a2a/
+│   │   ├── server.py                ← A2AServer (wraps agent as HTTP)
+│   │   └── client.py                ← A2AClient (async + fallback)
+│   ├── agents/
+│   │   ├── orchestrator.py          ← Intent routing + A2A dispatch
+│   │   ├── analysis_agent.py        ← MCP fetch + LLM analysis
+│   │   └── execution_agent.py       ← LLM plan + MCP orders
+│   ├── auth/store.py                ← SQLite users + JWT + sessions
+│   ├── brokers/delta/               ← DeltaSource + DeltaExecutor
+│   ├── brokers/fyers/               ← FyersSource
+│   ├── llm/factory.py               ← LLMFactory (OpenAI / Ollama)
+│   └── mcp/connector.py             ← call_mcp_tool() one-shot helper
 ├── frontend/
-│   └── app.py                   ← Streamlit chat UI
+│   └── app.py                       ← Streamlit chat UI
 ├── tests/
-│   └── test_trade_assistant.py  ← 10 tests (auth, agents, A2A, Delta live)
+│   └── test_trade_assistant.py      ← 10 tests
 └── data/
-    ├── users.db                 ← SQLite auth DB
-    └── logs/trade_assistant.log ← Rotating log file
+    ├── users.db                     ← SQLite auth DB
+    └── logs/trade_assistant.log     ← Rotating log file
 ```
 
 ---
@@ -247,5 +284,3 @@ trade_assistant/
 python -m pytest tests/ -v
 # 10 tests — runs in ~9s
 ```
-
-Tests cover: config loading, auth flow, A2A protocol, LLM factory, MCP connector, AnalysisAgent, ExecutionAgent, OrchestratorAgent A2A routing, FastAPI HTTP stack, Delta API live.
