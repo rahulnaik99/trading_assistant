@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trade Assistant — Architecture</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0d1117;
+      --surface:  #161b22;
+      --surface2: #1c2330;
+      --border:   #30363d;
+      --border2:  #21262d;
+      --text:     #c9d1d9;
+      --muted:    #8b949e;
+      --accent:   #58a6ff;
+      --bull:     #3fb950;
+      --bear:     #f85149;
+      --warn:     #d29922;
+      --purple:   #bc8cff;
+      --teal:     #39d353;
+      --orange:   #f0883e;
+      --radius:   10px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 13px;
+      min-height: 100vh;
+      padding: 32px 24px 64px;
+    }
+
+    h1 {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--accent);
+      margin-bottom: 4px;
+    }
+    .subtitle {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 36px;
+    }
+
+    /* ── Layout rows ── */
+    .row {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 16px;
+      align-items: stretch;
+    }
+    .row.center { justify-content: center; }
+
+    /* ── Arrow connectors ── */
+    .col-arrows {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      min-width: 60px;
+      flex-shrink: 0;
+    }
+    .arrow {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      color: var(--muted);
+      font-size: 10px;
+      gap: 2px;
+    }
+    .arrow .line {
+      width: 2px;
+      height: 28px;
+      background: var(--border);
+    }
+    .arrow .label {
+      font-size: 9px;
+      color: var(--accent);
+      white-space: nowrap;
+      background: var(--bg);
+      padding: 0 4px;
+      border-radius: 3px;
+    }
+    .arrow-head { font-size: 14px; color: var(--accent); line-height: 1; }
+
+    .h-arrow {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--muted);
+      font-size: 10px;
+      flex-shrink: 0;
+      padding: 0 4px;
+    }
+    .h-arrow .h-line {
+      width: 28px;
+      height: 2px;
+      background: var(--border);
+    }
+    .h-arrow .label {
+      font-size: 9px;
+      color: var(--accent);
+      white-space: nowrap;
+    }
+
+    /* ── Box ── */
+    .box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      flex: 1;
+    }
+    .box.accent-border { border-color: var(--accent); }
+    .box.bull-border   { border-color: var(--bull); }
+    .box.warn-border   { border-color: var(--warn); }
+    .box.purple-border { border-color: var(--purple); }
+    .box.orange-border { border-color: var(--orange); }
+    .box.muted-border  { border-color: var(--border2); }
+
+    .box-title {
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .box-subtitle {
+      font-size: 10px;
+      color: var(--muted);
+      font-weight: 400;
+      margin-left: 4px;
+    }
+
+    /* ── Tag pills ── */
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 600;
+      margin: 2px 2px 2px 0;
+    }
+    .tag.blue   { background: #122842; color: var(--accent); border: 1px solid #1d4168; }
+    .tag.green  { background: #0d2a1a; color: var(--bull);   border: 1px solid #1b4d2e; }
+    .tag.yellow { background: #2a1f0d; color: var(--warn);   border: 1px solid #4d3a1a; }
+    .tag.purple { background: #1e1230; color: var(--purple); border: 1px solid #3d2460; }
+    .tag.orange { background: #2a1a0d; color: var(--orange); border: 1px solid #4d3018; }
+    .tag.red    { background: #2a0d0d; color: var(--bear);   border: 1px solid #4d1818; }
+    .tag.muted  { background: var(--surface2); color: var(--muted); border: 1px solid var(--border2); }
+
+    /* ── Item list ── */
+    .item-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .item-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .item-list li .dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--muted);
+      margin-top: 5px;
+      flex-shrink: 0;
+    }
+    .item-list li .dot.blue   { background: var(--accent); }
+    .item-list li .dot.green  { background: var(--bull); }
+    .item-list li .dot.yellow { background: var(--warn); }
+    .item-list li .dot.purple { background: var(--purple); }
+    .item-list li .dot.orange { background: var(--orange); }
+
+    /* ── Two-column inside box ── */
+    .inner-cols {
+      display: flex;
+      gap: 12px;
+    }
+    .inner-col { flex: 1; }
+    .inner-col-title {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin-bottom: 6px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid var(--border2);
+    }
+
+    /* ── Section divider label ── */
+    .section-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      margin: 28px 0 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .section-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border2);
+    }
+
+    /* ── MCP grid ── */
+    .mcp-grid {
+      display: flex;
+      gap: 12px;
+    }
+    .mcp-box {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .mcp-box-title {
+      font-size: 11px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border2);
+    }
+
+    /* ── Intent routing table ── */
+    .route-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+    .route-table th {
+      text-align: left;
+      font-size: 10px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      padding: 0 8px 6px 0;
+      border-bottom: 1px solid var(--border2);
+    }
+    .route-table td {
+      padding: 5px 8px 5px 0;
+      border-bottom: 1px solid var(--border2);
+      vertical-align: top;
+    }
+    .route-table tr:last-child td { border-bottom: none; }
+
+    /* ── Fallback note ── */
+    .note {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      background: #1c1a0d;
+      border: 1px solid #3a3010;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 11px;
+      color: var(--warn);
+      margin-top: 10px;
+    }
+    .note .icon { flex-shrink: 0; }
+
+    /* ── Legend ── */
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-top: 32px;
+      padding: 12px 16px;
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius);
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .legend-dot {
+      width: 10px; height: 10px;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>📈 Trade Assistant — Architecture</h1>
+<p class="subtitle">Multi-agent AI trading system · FastAPI + A2A + MCP · Delta Exchange &amp; Fyers NSE</p>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<!-- LAYER 1 — BROWSER                                            -->
+<!-- ══════════════════════════════════════════════════════════════ -->
+<div class="section-label">Layer 1 — Browser</div>
+
+<div class="row">
+  <!-- TradingView Chart -->
+  <div class="box accent-border" style="flex:1.4">
+    <div class="box-title" style="color:var(--accent)">
+      📊 TradingView Chart
+      <span class="box-subtitle">frontend/index.html · left panel</span>
+    </div>
+    <ul class="item-list">
+      <li><span class="dot blue"></span>Live candlestick chart embedded via TradingView widget</li>
+      <li><span class="dot blue"></span>Timeframes: 1m · 3m · 5m · 15m · 30m · 1h · 4h · 1D · 1W</li>
+      <li><span class="dot blue"></span>Studies: MACD + RSI pre-loaded</li>
+      <li><span class="dot blue"></span>Drawings saved to TradingView account (login once on tradingview.com)</li>
+      <li><span class="dot blue"></span>Symbol auto-updates when Analyse/Execute is clicked</li>
+    </ul>
+  </div>
+
+  <!-- Right Panel -->
+  <div class="box accent-border" style="flex:1">
+    <div class="box-title" style="color:var(--accent)">
+      🖥 Control &amp; Summary Panel
+      <span class="box-subtitle">right panel</span>
+    </div>
+    <ul class="item-list">
+      <li><span class="dot blue"></span>Symbol input → broker badge auto-detects Delta vs Fyers</li>
+      <li><span class="dot blue"></span><strong>Analyse</strong> — fetches analysis, shows trade setup cards</li>
+      <li><span class="dot blue"></span><strong>Execute</strong> — runs analysis then places order</li>
+      <li><span class="dot blue"></span>Paper / Real toggle · LLM selector (OpenAI / Ollama)</li>
+      <li><span class="dot blue"></span>Summary cards: Setup · Levels · Key Levels · Analysis · Execution</li>
+    </ul>
+    <div style="margin-top:10px">
+      <span class="tag blue">GET /</span>
+      <span class="tag blue">POST /chat</span>
+      <span class="tag blue">POST /sessions/new</span>
+    </div>
+  </div>
+</div>
+
+<!-- Arrow down -->
+<div style="display:flex;justify-content:center;margin:4px 0">
+  <div class="arrow">
+    <div class="line"></div>
+    <div class="label">POST /chat (no auth)</div>
+    <div class="line"></div>
+    <div class="arrow-head">▼</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<!-- LAYER 2 — FASTAPI GATEWAY                                    -->
+<!-- ══════════════════════════════════════════════════════════════ -->
+<div class="section-label">Layer 2 — FastAPI Gateway · :8100</div>
+
+<div class="row center">
+  <div class="box warn-border" style="max-width:820px;width:100%">
+    <div class="box-title" style="color:var(--warn)">
+      ⚡ FastAPI Gateway
+      <span class="box-subtitle">backend/main.py · port 8100</span>
+    </div>
+    <div class="inner-cols">
+      <div class="inner-col">
+        <div class="inner-col-title">Endpoints</div>
+        <ul class="item-list">
+          <li><span class="dot yellow"></span><code>GET  /</code> → serves index.html</li>
+          <li><span class="dot yellow"></span><code>POST /chat</code> → OrchestratorAgent</li>
+          <li><span class="dot yellow"></span><code>POST /sessions/new</code> → auto guest session</li>
+          <li><span class="dot yellow"></span><code>GET  /fyers/login-url</code></li>
+          <li><span class="dot yellow"></span><code>POST /fyers/generate-token</code></li>
+          <li><span class="dot yellow"></span><code>GET  /fyers/auth-status</code></li>
+          <li><span class="dot yellow"></span><code>GET  /health</code></li>
+          <li><span class="dot yellow"></span><code>GET  /logs/download</code></li>
+        </ul>
+      </div>
+      <div class="inner-col">
+        <div class="inner-col-title">Supporting</div>
+        <ul class="item-list">
+          <li><span class="dot yellow"></span>CORS: all origins allowed (local dev)</li>
+          <li><span class="dot yellow"></span>Auth store: SQLite users + JWT (kept for /logs)</li>
+          <li><span class="dot yellow"></span>Session tokens: stored per session_id</li>
+          <li><span class="dot yellow"></span>Token counting: tiktoken (gpt-4o-mini)</li>
+          <li><span class="dot yellow"></span>Rotating log: data/logs/trade_assistant.log</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Arrow down -->
+<div style="display:flex;justify-content:center;margin:4px 0">
+  <div class="arrow">
+    <div class="line"></div>
+    <div class="label">handle_message()</div>
+    <div class="line"></div>
+    <div class="arrow-head">▼</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<!-- LAYER 3 — ORCHESTRATOR                                       -->
+<!-- ══════════════════════════════════════════════════════════════ -->
+<div class="section-label">Layer 3 — Orchestrator Agent</div>
+
+<div class="row center">
+  <div class="box purple-border" style="max-width:820px;width:100%">
+    <div class="box-title" style="color:var(--purple)">
+      🧠 Orchestrator Agent
+      <span class="box-subtitle">backend/agents/orchestrator.py</span>
+    </div>
+    <div class="inner-cols">
+      <div class="inner-col">
+        <div class="inner-col-title">Step 1 — Symbol Normalisation</div>
+        <ul class="item-list">
+          <li><span class="dot purple"></span>btc / eth / sol → BTCUSDT / ETHUSDT / SOLUSDT <span class="tag purple">delta</span></li>
+          <li><span class="dot purple"></span>reliance / tcs / nifty → NSE:RELIANCE-EQ <span class="tag blue">fyers</span></li>
+          <li><span class="dot purple"></span>banknifty / sensex → NSE:BANKNIFTY / BSE:SENSEX <span class="tag blue">fyers</span></li>
+        </ul>
+
+        <div class="inner-col-title" style="margin-top:12px">Step 2 — Intent Routing (LLM)</div>
+        <table class="route-table">
+          <thead>
+            <tr>
+              <th>User says</th>
+              <th>Intent</th>
+              <th>Route</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>"Analyse BTCUSDT"</td>
+              <td><span class="tag green">analyse</span></td>
+              <td>→ Analysis Agent</td>
+            </tr>
+            <tr>
+              <td>"Execute trade on ETH"</td>
+              <td><span class="tag orange">execute</span></td>
+              <td>→ Analysis + Execution Agent</td>
+            </tr>
+            <tr>
+              <td>"What is Canara profit?"</td>
+              <td><span class="tag blue">research</span></td>
+              <td>→ Tavily MCP → LLM</td>
+            </tr>
+            <tr>
+              <td>"Hello / general Q"</td>
+              <td><span class="tag muted">chat</span></td>
+              <td>→ LLM directly</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="inner-col">
+        <div class="inner-col-title">A2A Clients</div>
+        <ul class="item-list">
+          <li><span class="dot purple"></span>Analysis client → http://localhost:8101 (timeout 300s)</li>
+          <li><span class="dot purple"></span>Execution client → http://localhost:8102 (timeout 300s)</li>
+          <li><span class="dot purple"></span>Catches ConnectError + TimeoutException → failed TaskResponse</li>
+        </ul>
+        <div class="note">
+          <span class="icon">⚠️</span>
+          <span>In-process fallback: if :8101 is unreachable or times out, AnalysisAgent runs directly inside :8100 — analysis still works with only one service running.</span>
+        </div>
+        <div style="margin-top:10px">
+          <div class="inner-col-title">LLM Factory</div>
+          <ul class="item-list">
+            <li><span class="dot purple"></span>OpenAI → gpt-4o-mini</li>
+            <li><span class="dot purple"></span>Ollama → local model (http://localhost:11434)</li>
+            <li><span class="dot purple"></span>Injected per-request, no global state</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Arrows down to agents -->
+<div class="row center" style="gap:120px;margin:4px 0">
+  <div class="arrow">
+    <div class="line"></div>
+    <div class="label">A2A HTTP POST /a2a/task</div>
+    <div class="line"></div>
+    <div class="arrow-head">▼</div>
+  </div>
+  <div class="arrow">
+    <div class="line"></div>
+    <div class="label">A2A HTTP POST /a2a/task</div>
+    <div class="line"></div>
+    <div class="arrow-head">▼</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<!-- LAYER 4 — ANALYSIS + EXECUTION AGENTS                        -->
+<!-- ══════════════════════════════════════════════════════════════ -->
+<div class="section-label">Layer 4 — Specialist Agents</div>
+
+<div class="row">
+  <!-- Analysis Agent -->
+  <div class="box bull-border">
+    <div class="box-title" style="color:var(--bull)">
+      🔬 Analysis Agent
+      <span class="box-subtitle">backend/agents/analysis_agent.py · :8101</span>
+    </div>
+    <div class="inner-cols">
+      <div class="inner-col">
+        <div class="inner-col-title">What it does</div>
+        <ul class="item-list">
+          <li><span class="dot green"></span>Receives: symbol, source, trade_type, llm_provider</li>
+          <li><span class="dot green"></span>Fetches candles + metrics + news <strong>in parallel</strong> (asyncio.gather)</li>
+          <li><span class="dot green"></span>Builds prompt with OHLCV data + funding rates + headlines</li>
+          <li><span class="dot green"></span>Calls LLM → structured JSON analysis</li>
+        </ul>
+        <div class="inner-col-title" style="margin-top:10px">Output schema</div>
+        <ul class="item-list">
+          <li><span class="dot green"></span>trend · strength · last_price</li>
+          <li><span class="dot green"></span>entry_zone · stop_loss · targets[]</li>
+          <li><span class="dot green"></span>rr_ratio · confidence · summary</li>
+          <li><span class="dot green"></span>key_levels · news_context</li>
+        </ul>
+      </div>
+      <div class="inner-col">
+        <div class="inner-col-title">MCP Tools used</div>
+        <ul class="item-list">
+          <li><span class="dot green"></span><span class="tag green">delta</span> fetch_candles</li>
+          <li><span class="dot green"></span><span class="tag green">delta</span> fetch_perpetual_metrics</li>
+          <li><span class="dot green"></span><span class="tag blue">fyers</span> fetch_candles</li>
+          <li><span class="dot green"></span><span class="tag blue">fyers</span> get_quote</li>
+          <li><span class="dot green"></span><span class="tag muted">tavily</span> search_news</li>
+        </ul>
+        <div style="margin-top:8px">
+          <span class="tag green">intraday</span>
+          <span class="tag yellow">swing</span>
+          <span class="tag purple">longterm</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Execution Agent -->
+  <div class="box orange-border">
+    <div class="box-title" style="color:var(--orange)">
+      ⚡ Execution Agent
+      <span class="box-subtitle">backend/agents/execution_agent.py · :8102</span>
+    </div>
+    <div class="inner-cols">
+      <div class="inner-col">
+        <div class="inner-col-title">What it does</div>
+        <ul class="item-list">
+          <li><span class="dot orange"></span>Receives: analysis output + mode (paper/real)</li>
+          <li><span class="dot orange"></span>Calls LLM → generates execution plan</li>
+          <li><span class="dot orange"></span><strong>Paper mode:</strong> simulates order, returns PAPER-{task_id}</li>
+          <li><span class="dot orange"></span><strong>Real mode:</strong> places live bracket order via MCP</li>
+        </ul>
+        <div class="inner-col-title" style="margin-top:10px">Output schema</div>
+        <ul class="item-list">
+          <li><span class="dot orange"></span>action · symbol · broker</li>
+          <li><span class="dot orange"></span>order_type · entry · stop_loss</li>
+          <li><span class="dot orange"></span>take_profit · qty · risk_amount</li>
+          <li><span class="dot orange"></span>rr_ratio · rationale · mode</li>
+        </ul>
+      </div>
+      <div class="inner-col">
+        <div class="inner-col-title">MCP Tools used</div>
+        <ul class="item-list">
+          <li><span class="dot orange"></span><span class="tag green">delta</span> place_order</li>
+          <li><span class="dot orange"></span><span class="tag green">delta</span> place_market_order</li>
+          <li><span class="dot orange"></span><span class="tag blue">fyers</span> place_order</li>
+          <li><span class="dot orange"></span><span class="tag blue">fyers</span> get_positions</li>
+        </ul>
+        <div class="note" style="margin-top:8px">
+          <span class="icon">⚠️</span>
+          <span>Real trades place live bracket orders. Toggle Paper/Real carefully.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Arrow down to MCP -->
+<div style="display:flex;justify-content:center;margin:4px 0">
+  <div class="arrow">
+    <div class="line"></div>
+    <div class="label">MCP stdio (subprocess per call)</div>
+    <div class="line"></div>
+    <div class="arrow-head">▼</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<!-- LAYER 5 — MCP SERVERS                                        -->
+<!-- ══════════════════════════════════════════════════════════════ -->
+<div class="section-label">Layer 5 — MCP Tool Servers (auto-spawned subprocesses)</div>
+
+<div class="mcp-grid">
+  <!-- Delta -->
+  <div class="mcp-box" style="border-color:#1d4168">
+    <div class="mcp-box-title" style="color:var(--accent)">
+      🔷 Delta Exchange MCP
+      <span class="box-subtitle">mcp_servers/delta_server.py</span>
+    </div>
+    <ul class="item-list">
+      <li><span class="dot blue"></span>fetch_candles — OHLCV data (any interval)</li>
+      <li><span class="dot blue"></span>fetch_perpetual_metrics — funding rate, OI, mark price</li>
+      <li><span class="dot blue"></span>get_mark_price — current LTP</li>
+      <li><span class="dot blue"></span>place_order — bracket order (authenticated)</li>
+      <li><span class="dot blue"></span>place_market_order — simple market order</li>
+      <li><span class="dot blue"></span>get_positions — open positions</li>
+      <li><span class="dot blue"></span>get_orders — order history</li>
+      <li><span class="dot blue"></span>cancel_order — cancel by order ID</li>
+    </ul>
+    <div style="margin-top:8px">
+      <span class="tag muted">api.delta.exchange</span>
+      <span class="tag muted">DELTA_API_KEY</span>
+    </div>
+  </div>
+
+  <!-- Fyers -->
+  <div class="mcp-box" style="border-color:#1b4d2e">
+    <div class="mcp-box-title" style="color:var(--bull)">
+      🟢 Fyers NSE MCP
+      <span class="box-subtitle">mcp_servers/fyers_server.py</span>
+    </div>
+    <ul class="item-list">
+      <li><span class="dot green"></span>fetch_candles — NSE/BSE OHLCV data</li>
+      <li><span class="dot green"></span>get_quote — LTP, OHLC, volume</li>
+      <li><span class="dot green"></span>check_auth — token validity</li>
+      <li><span class="dot green"></span>place_order — bracket order (authenticated)</li>
+      <li><span class="dot green"></span>get_positions — open positions</li>
+      <li><span class="dot green"></span>get_orders — order history</li>
+      <li><span class="dot green"></span>cancel_order — cancel by order ID</li>
+    </ul>
+    <div style="margin-top:8px">
+      <span class="tag muted">api-t2.fyers.in</span>
+      <span class="tag red">token expires daily</span>
+    </div>
+  </div>
+
+  <!-- Tavily -->
+  <div class="mcp-box" style="border-color:#2a2a2a">
+    <div class="mcp-box-title" style="color:var(--muted)">
+      🔍 Tavily Search MCP
+      <span class="box-subtitle">mcp_servers/tavily_server.py</span>
+    </div>
+    <ul class="item-list">
+      <li><span class="dot"></span>search_market — general market web search</li>
+      <li><span class="dot"></span>search_news — financial news headlines</li>
+      <li><span class="dot"></span>Fallback: Google RSS if Tavily key missing</li>
+    </ul>
+    <div style="margin-top:8px">
+      <span class="tag muted">api.tavily.com</span>
+      <span class="tag muted">TAVILY_API_KEY (optional)</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<!-- DATA FLOW                                                     -->
+<!-- ══════════════════════════════════════════════════════════════ -->
+<div class="section-label">Full Data Flow — Analyse Request</div>
+
+<div class="box muted-border">
+  <div style="font-family:monospace;font-size:11px;line-height:2;color:var(--text)">
+    <span style="color:var(--accent)">Browser</span>
+    &nbsp;→&nbsp; POST /chat { message: "Analyse BTCUSDT for intraday" }
+    <br>
+    &nbsp;&nbsp;&nbsp;<span style="color:var(--warn)">Gateway :8100</span>
+    &nbsp;→&nbsp; OrchestratorAgent.handle_message()
+    <br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--purple)">Orchestrator</span>
+    &nbsp;→&nbsp; LLM: classify intent &amp; symbol → { intent: "analyse", symbol: "BTCUSDT", source: "delta" }
+    <br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--purple)">Orchestrator</span>
+    &nbsp;→&nbsp; A2A POST http://localhost:8101/a2a/task
+    <br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--bull)">Analysis Agent :8101</span>
+    &nbsp;→&nbsp; asyncio.gather(
+    <br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    delta.fetch_candles(BTCUSDT, 5m),
+    <br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    delta.fetch_perpetual_metrics(BTCUSDT),
+    <br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    tavily.search_news("BTCUSDT analysis")
+    <br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;)
+    <br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--bull)">Analysis Agent</span>
+    &nbsp;→&nbsp; LLM(OHLCV + funding rate + news) → JSON analysis
+    <br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--purple)">Orchestrator</span>
+    &nbsp;→&nbsp; format reply + return { reply, analysis }
+    <br>
+    &nbsp;&nbsp;&nbsp;<span style="color:var(--warn)">Gateway</span>
+    &nbsp;→&nbsp; save messages to SQLite, count tokens
+    <br>
+    <span style="color:var(--accent)">Browser</span>
+    &nbsp;←&nbsp; { reply, analysis: { trend, entry_zone, stop_loss, targets, rr_ratio, ... } }
+    <br>
+    <span style="color:var(--accent)">Chart</span>
+    &nbsp;reloads to BINANCE:BTCUSDT at selected timeframe
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════ -->
+<!-- PORTS & CONFIG                                                -->
+<!-- ══════════════════════════════════════════════════════════════ -->
+<div class="section-label">Services &amp; Configuration</div>
+
+<div class="row">
+  <div class="box muted-border">
+    <div class="box-title">🔌 Ports</div>
+    <table class="route-table">
+      <thead><tr><th>Service</th><th>Port</th><th>File</th></tr></thead>
+      <tbody>
+        <tr><td><span class="tag warn">FastAPI + HTML UI</span></td><td>:8100</td><td>backend/main.py</td></tr>
+        <tr><td><span class="tag green">Analysis Agent</span></td><td>:8101</td><td>services/analysis_agent_service.py</td></tr>
+        <tr><td><span class="tag orange">Execution Agent</span></td><td>:8102</td><td>services/execution_agent_service.py</td></tr>
+        <tr><td><span class="tag blue">Delta MCP</span></td><td>stdio</td><td>mcp_servers/delta_server.py</td></tr>
+        <tr><td><span class="tag green">Fyers MCP</span></td><td>stdio</td><td>mcp_servers/fyers_server.py</td></tr>
+        <tr><td><span class="tag muted">Tavily MCP</span></td><td>stdio</td><td>mcp_servers/tavily_server.py</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="box muted-border">
+    <div class="box-title">🔑 .env Keys</div>
+    <ul class="item-list">
+      <li><span class="dot blue"></span><code>OPENAI_API_KEY</code> — LLM calls</li>
+      <li><span class="dot blue"></span><code>DELTA_API_KEY / DELTA_API_SECRET</code> — crypto orders + candles</li>
+      <li><span class="dot green"></span><code>FYERS_CLIENT_ID / FYERS_ACCESS_TOKEN</code> — NSE data + orders</li>
+      <li><span class="dot green"></span><code>FYERS_SECRET_KEY</code> — token generation only</li>
+      <li><span class="dot"></span><code>TAVILY_API_KEY</code> — news search (optional, falls back to RSS)</li>
+      <li><span class="dot"></span><code>OLLAMA_BASE_URL</code> — local LLM (optional)</li>
+      <li><span class="dot"></span><code>SECRET_KEY</code> — JWT signing</li>
+    </ul>
+    <div class="note" style="margin-top:10px">
+      <span class="icon">⚠️</span>
+      <span>Fyers access token expires daily at midnight IST. Refresh via POST /fyers/generate-token.</span>
+    </div>
+  </div>
+</div>
+
+<!-- Legend -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div> Browser / Frontend</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--warn)"></div> FastAPI Gateway</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--purple)"></div> Orchestrator Agent</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--bull)"></div> Analysis Agent + Fyers MCP</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--orange)"></div> Execution Agent</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#1d4168; border:1px solid var(--accent)"></div> Delta MCP</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--border2)"></div> Tavily MCP</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--bear)"></div> Warning / Real trades</div>
+</div>
+
+</body>
+</html>
