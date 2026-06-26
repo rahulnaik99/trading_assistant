@@ -1,7 +1,39 @@
-.env
+# Python
 __pycache__/
-*.pyc
-data/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
 venv/
 .venv/
-*.log
+env/
+.env.local
+
+# Environment / secrets
+.env
+
+# IDE
+.idea/
+.vscode/
+*.suo
+*.user
+
+# Streamlit
+.streamlit/
+
+# Database & logs
+data/users.db
+data/logs/
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db

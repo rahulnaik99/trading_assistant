@@ -1,6 +1,6 @@
-# Trade Assistant — AI Multi-Agent Trading Chat
+# Trade Assistant — AI Multi-Agent Trading Dashboard
 
-A ChatGPT-style trading assistant that analyses markets, identifies demand/supply zones, and executes trades using live data from Delta Exchange and Fyers — powered by OpenAI or Ollama via A2A-connected agents and MCP tool servers.
+A split-panel trading assistant with a live TradingView chart on the left and an AI-powered trade setup summary on the right. Analyse or execute trades using live data from Delta Exchange (crypto) and Fyers (NSE equities) — powered by OpenAI or Ollama via A2A-connected agents and MCP tool servers.
 
 ---
 
@@ -223,9 +223,38 @@ curl http://localhost:8100/fyers/auth-status
 
 ---
 
+## UI Layout
+
+The frontend (`frontend/app.py`) is a two-column Streamlit dashboard:
+
+| Column | Width | Content |
+|---|---|---|
+| Left | ~65% | TradingView Advanced Chart (dark theme, MACD + RSI pre-loaded) |
+| Right | ~35% | Symbol input, broker badge, Analyse/Execute buttons, trade setup summary |
+
+**Symbol → Broker auto-detection:**
+- `BTC`, `ETHUSDT`, `SOLUSDT`, etc. → **Delta (Crypto)** badge → routes to Delta Exchange
+- `RELIANCE`, `NIFTY`, `BANKNIFTY`, etc. → **Fyers (NSE)** badge → routes to Fyers
+
+**Symbol → TradingView mapping:**
+- `BTCUSDT` → `BINANCE:BTCUSDT`
+- `RELIANCE` → `NSE:RELIANCE`
+- `NIFTY` / `NIFTY50` → `NSE:NIFTY`
+- `BANKNIFTY` → `NSE:BANKNIFTY`
+
+**Trade Setup Summary cards** (shown after Analyse):
+1. **Trade Setup** — trend (bull/bear colour coded), strength, price, confidence
+2. **Levels** — entry zone, stop loss, R:R ratio, targets (T1/T2/T3)
+3. **Key Levels** — support/resistance
+4. **Analysis** — plain-text LLM summary
+5. **Execution Plan** (after Execute) — action, qty, order type, paper/real mode
+
+---
+
 ## Features
 
-- **ChatGPT-style UI** with session history and multiple conversations
+- **Split-panel dashboard** — live TradingView chart + structured trade setup summary side-by-side
+- **Auto broker routing** — symbol auto-detects Delta (crypto) vs Fyers (NSE) with a live badge
 - **JWT auth** — login/register, sessions saved to SQLite
 - **Token counter** — live tokens used + estimated OpenAI cost
 - **LLM selection** — OpenAI gpt-4o-mini or Ollama per session
@@ -268,7 +297,7 @@ trade_assistant/
 │   ├── llm/factory.py               ← LLMFactory (OpenAI / Ollama)
 │   └── mcp/connector.py             ← call_mcp_tool() one-shot helper
 ├── frontend/
-│   └── app.py                       ← Streamlit chat UI
+│   └── app.py                       ← Split-panel: TradingView chart + trade summary
 ├── tests/
 │   └── test_trade_assistant.py      ← 10 tests
 └── data/
