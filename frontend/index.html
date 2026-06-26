@@ -384,28 +384,29 @@ function toBackendSymbol(s) {
 }
 
 /* ═══════════════════════════════════════════════════
-   Apply symbol — updates state, badge, display, chart
+   Apply symbol — updates panel state only.
+   Chart is fully independent — use TV's own search bar.
 ═══════════════════════════════════════════════════ */
 const symDisplay  = document.getElementById('sym-display');
 const brokerBadge = document.getElementById('broker-badge');
-const tvFrame     = document.getElementById('tv-frame');
 
 function applySymbol(raw) {
   currentSym = raw.toUpperCase().replace(/\.P$/, '');
   const broker = detectBroker(currentSym);
-  symDisplay.textContent   = currentSym;
-  brokerBadge.textContent  = broker === 'delta' ? 'Delta' : 'Fyers NSE';
-  brokerBadge.style.color  = broker === 'delta' ? '#60a5fa' : '#34d399';
-  updateChart(toTVSymbol(currentSym));
+  symDisplay.textContent  = currentSym;
+  brokerBadge.textContent = broker === 'delta' ? 'Delta' : 'Fyers NSE';
+  brokerBadge.style.color = broker === 'delta' ? '#60a5fa' : '#34d399';
+  // chart NOT touched — fully independent
 }
 
 /* ═══════════════════════════════════════════════════
-   TradingView widget
-   - tv.js loaded once, widget recreated on sym/TF change
-   - setSymbol/setResolution are Charting Library (paid) only
-   - load_last_chart restores drawings from TV cloud on each init
+   TradingView widget — independent of right panel.
+   Symbol is controlled via TV's own search bar.
+   TF buttons rebuild the widget at the new interval,
+   keeping whatever symbol TV has currently loaded.
 ═══════════════════════════════════════════════════ */
-let tvLibLoaded = false;
+let tvLibLoaded  = false;
+let lastTVSymbol = 'DELTA:BTCUSDT.P';   // tracks what TV currently shows
 
 function loadTVLib(cb) {
   if (tvLibLoaded) { cb(); return; }
@@ -415,18 +416,14 @@ function loadTVLib(cb) {
   document.head.appendChild(s);
 }
 
-function buildWidget(tvSym) {
-  // Clear container before creating a new widget instance
+function buildWidget(sym) {
   document.getElementById('tv-widget').innerHTML = '';
-
   loadTVLib(() => {
-    new TradingView.widget({
+    const w = new TradingView.widget({
       container_id:      'tv-widget',
       autosize:          true,
-      symbol:            tvSym,
+      symbol:            sym,
       interval:          currentTf,
-
-      /* appearance */
       timezone:          'Asia/Kolkata',
       theme:             'dark',
       style:             '1',
@@ -438,14 +435,11 @@ function buildWidget(tvSym) {
       hide_legend:       false,
       allow_symbol_change: true,
       save_image:        true,
-
-      /* drawings & layout saved to TV account cloud */
       charts_storage_url:         'https://saveload.tradingview.com',
       charts_storage_api_version: '1.1',
       client_id:                  'tradingview.com',
       user_id:                    'public_user_id',
       load_last_chart:             true,
-
       enabled_features: [
         'study_templates',
         'use_localstorage_for_settings',
@@ -460,22 +454,26 @@ function buildWidget(tvSym) {
       disabled_features: [],
       support_host: 'https://www.tradingview.com',
     });
+    // Keep lastTVSymbol in sync whenever the user changes symbol inside TV
+    w.onChartReady && w.onChartReady(() => {
+      try {
+        w.activeChart().onSymbolChanged().subscribe(null, () => {
+          try { lastTVSymbol = w.activeChart().symbol(); } catch(_) {}
+        });
+      } catch(_) {}
+    });
   });
 }
 
-function updateChart(tvSym) {
-  buildWidget(tvSym);
-}
-
 /* ═══════════════════════════════════════════════════
-   TF buttons — rebuild widget with new interval
+   TF buttons — rebuild at new interval, same symbol
 ═══════════════════════════════════════════════════ */
 document.querySelectorAll('.tf-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentTf = btn.dataset.tf;
-    buildWidget(toTVSymbol(currentSym));
+    buildWidget(lastTVSymbol);   // keep whatever symbol TV is currently showing
   });
 });
 
@@ -665,7 +663,8 @@ function esc(s) {
    Boot
 ═══════════════════════════════════════════════════ */
 initSession();
-applySymbol('BTCUSDT');
+applySymbol('BTCUSDT');          // sets panel state only
+buildWidget(lastTVSymbol);       // chart starts on DELTA:BTCUSDT.P independently
 </script>
 </body>
 </html>
