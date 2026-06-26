@@ -38,7 +38,7 @@ class LLMFactory:
             from langchain_openai import ChatOpenAI
             if not settings.OPENAI_API_KEY:
                 raise ValueError("OPENAI_API_KEY is not set in .env")
-            return ChatOpenAI(model="gpt-4o-mini", api_key=settings.OPENAI_API_KEY)
+            return ChatOpenAI(model="gpt-4o", api_key=settings.OPENAI_API_KEY)
 
         if provider == "ollama":
             from langchain_ollama import ChatOllama
