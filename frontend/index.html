@@ -277,6 +277,36 @@
     @keyframes spin { to { transform: rotate(360deg); } }
 
     #panel-col { position: relative; }
+
+    /* ── Timeframe bar (above chart) ── */
+    #tf-bar {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 5px 10px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #tf-bar span {
+      font-size: 10px;
+      color: var(--muted);
+      margin-right: 4px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+    .tf-btn {
+      padding: 3px 9px;
+      border: 1px solid var(--border2);
+      border-radius: 4px;
+      background: var(--bg);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .tf-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .tf-btn.active { background: var(--accent); color: #0d1117; border-color: var(--accent); }
   </style>
 </head>
 <body>
@@ -293,8 +323,21 @@
 <main>
 
   <!-- Left: TradingView chart -->
-  <div id="chart-col">
-    <div class="tradingview-widget-container" style="height:100%;width:100%">
+  <div id="chart-col" style="display:flex;flex-direction:column;">
+    <!-- Timeframe bar -->
+    <div id="tf-bar">
+      <span>TF</span>
+      <button class="tf-btn" data-tf="1">1m</button>
+      <button class="tf-btn" data-tf="3">3m</button>
+      <button class="tf-btn active" data-tf="5">5m</button>
+      <button class="tf-btn" data-tf="15">15m</button>
+      <button class="tf-btn" data-tf="30">30m</button>
+      <button class="tf-btn" data-tf="60">1h</button>
+      <button class="tf-btn" data-tf="240">4h</button>
+      <button class="tf-btn" data-tf="D">1D</button>
+      <button class="tf-btn" data-tf="W">1W</button>
+    </div>
+    <div class="tradingview-widget-container" style="flex:1;width:100%">
       <div id="tv-widget" style="height:100%;width:100%"></div>
     </div>
   </div>
@@ -348,6 +391,7 @@ const API = 'http://localhost:8100';
 let sessionId  = null;
 let tradeMode  = 'paper';
 let totalTokens = 0;
+let currentTf  = '5';   // default 5 min
 
 // ── Symbol helpers ──────────────────────────────────────────────────────────
 const DELTA_MAP = {
@@ -393,7 +437,7 @@ function loadChart(tvSym) {
   script.innerHTML = JSON.stringify({
     autosize: true,
     symbol: tvSym,
-    interval: 'D',
+    interval: currentTf,
     timezone: 'Asia/Kolkata',
     theme: 'dark',
     style: '1',
@@ -451,6 +495,16 @@ symInput.addEventListener('input', () => {
 
 symInput.addEventListener('keydown', e => {
   if (e.key === 'Enter') document.getElementById('btn-analyse').click();
+});
+
+// ── Timeframe buttons ────────────────────────────────────────────────────
+document.querySelectorAll('.tf-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentTf = btn.dataset.tf;
+    loadChart(toTVSymbol(document.getElementById('sym-input').value || 'BTCUSDT'));
+  });
 });
 
 // ── Trade mode toggles ───────────────────────────────────────────────────

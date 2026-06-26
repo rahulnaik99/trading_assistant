@@ -226,7 +226,7 @@ The frontend is a pure HTML/CSS/JS single-page app served directly by FastAPI at
 
 | Column | Width | Content |
 |---|---|---|
-| Left | ~65% | TradingView Advanced Chart (dark theme, MACD + RSI pre-loaded) |
+| Left | ~65% | TradingView Advanced Chart with timeframe bar (1m / 3m / **5m** / 15m / 30m / 1h / 4h / 1D / 1W), dark theme, MACD + RSI pre-loaded |
 | Right | ~35% | Symbol input, broker badge, Analyse/Execute buttons, trade setup summary |
 
 **Symbol → Broker auto-detection:**
