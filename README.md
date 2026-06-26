@@ -226,8 +226,8 @@ The frontend is a pure HTML/CSS/JS single-page app served directly by FastAPI at
 
 | Column | Width | Content |
 |---|---|---|
-| Left | ~65% | Full TradingView widget (all toolbars, drawings, screenshot, save/load) — single iframe, preserved on symbol/TF change |
-| Right | ~35% | Symbol input + dropdown + Analyse/Execute + summary cards. **Hide/Show Panel** button in header collapses the right panel for full-screen chart. |
+| Left | ~65% | Full TradingView site loaded in an iframe (`tradingview.com/chart/?symbol=...&interval=...`) — all TV features, drawings sync to TV account, TF bar updates the URL |
+| Right | ~35% | Symbol dropdown (30+ symbols: Crypto/Indices/Banking/IT/Large Cap), broker badge, Analyse/Execute buttons, trade summary cards. **Hide/Show Panel** in header. |
 
 **Symbol → Broker auto-detection:**
 - `BTC`, `ETHUSDT`, `SOLUSDT`, etc. → **Delta (Crypto)** badge → routes to Delta Exchange

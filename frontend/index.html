@@ -19,224 +19,103 @@
       --bear:     #f85149;
       --warn:     #d29922;
       --radius:   8px;
-      --panel-w:  340px;
+      --panel-w:  320px;
     }
 
-    html, body {
-      height: 100%;
-      background: var(--bg);
-      color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      font-size: 13px;
-      overflow: hidden;
-    }
+    html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 13px; }
 
-    /* ── Layout shell ── */
-    #shell {
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-    }
+    #shell { display: flex; flex-direction: column; height: 100%; }
 
     /* ── Header ── */
     header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 6px 14px;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
-      z-index: 20;
+      display: flex; align-items: center; gap: 10px;
+      padding: 5px 14px;
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      flex-shrink: 0; z-index: 20;
     }
-    header h1 {
-      font-size: 14px;
-      font-weight: 800;
-      color: var(--accent);
-      white-space: nowrap;
-      margin-right: 4px;
-    }
-    .sep { color: var(--border); font-size: 16px; }
-
-    .status-dot {
-      width: 7px; height: 7px; border-radius: 50%;
-      background: #444; flex-shrink: 0;
-    }
+    header h1 { font-size: 14px; font-weight: 800; color: var(--accent); white-space: nowrap; }
+    .sep { color: var(--border); }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #444; flex-shrink: 0; }
     .status-dot.ok  { background: var(--bull); box-shadow: 0 0 4px var(--bull); }
     .status-dot.err { background: var(--bear); }
     #status-text { font-size: 11px; color: var(--muted); }
-
-    /* spacer pushes toggle to the right */
     .spacer { flex: 1; }
-
-    /* panel toggle button */
     #btn-toggle-panel {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      padding: 4px 10px;
-      border: 1px solid var(--border);
-      border-radius: 5px;
-      background: var(--bg);
-      color: var(--muted);
-      font-size: 11px;
-      font-weight: 600;
-      cursor: pointer;
-      white-space: nowrap;
-      transition: color .15s, border-color .15s;
+      display: flex; align-items: center; gap: 5px;
+      padding: 4px 10px; border: 1px solid var(--border);
+      border-radius: 5px; background: var(--bg); color: var(--muted);
+      font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap;
     }
     #btn-toggle-panel:hover { color: var(--accent); border-color: var(--accent); }
-    #btn-toggle-panel .arrow { font-size: 13px; }
 
-    /* ── Main row ── */
-    #workspace {
-      display: flex;
-      flex: 1;
-      overflow: hidden;
-    }
+    /* ── Workspace ── */
+    #workspace { display: flex; flex: 1; overflow: hidden; }
 
     /* ── Chart column ── */
-    #chart-col {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
-      overflow: hidden;
-      transition: flex .25s ease;
-    }
+    #chart-col { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 
-    /* TF bar */
     #tf-bar {
-      display: flex;
-      align-items: center;
-      gap: 3px;
+      display: flex; align-items: center; gap: 3px;
       padding: 4px 10px;
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
+      background: var(--surface); border-bottom: 1px solid var(--border);
       flex-shrink: 0;
     }
-    #tf-bar .tf-label {
-      font-size: 10px;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: .06em;
-      margin-right: 4px;
-    }
+    .tf-label { font-size: 10px; color: var(--muted); text-transform: uppercase;
+      letter-spacing: .06em; margin-right: 4px; }
     .tf-btn {
-      padding: 2px 8px;
-      border: 1px solid var(--border2);
-      border-radius: 4px;
-      background: var(--bg);
-      color: var(--muted);
-      font-size: 11px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all .1s;
+      padding: 2px 8px; border: 1px solid var(--border2); border-radius: 4px;
+      background: var(--bg); color: var(--muted); font-size: 11px; font-weight: 600; cursor: pointer;
     }
     .tf-btn:hover { border-color: var(--accent); color: var(--accent); }
     .tf-btn.active { background: var(--accent); color: #0d1117; border-color: var(--accent); }
 
-    /* TV container */
-    #tv-container {
-      flex: 1;
-      width: 100%;
-      min-height: 0;
-    }
-    #tv-widget {
-      width: 100%;
-      height: 100%;
+    #tv-frame {
+      flex: 1; width: 100%; border: none;
+      display: block;
     }
 
     /* ── Right panel ── */
     #panel-col {
-      width: var(--panel-w);
-      flex-shrink: 0;
-      display: flex;
-      flex-direction: column;
+      width: var(--panel-w); flex-shrink: 0;
+      display: flex; flex-direction: column;
       border-left: 1px solid var(--border);
-      overflow: hidden;
+      overflow: hidden; position: relative;
       transition: width .25s ease, opacity .2s ease;
-      position: relative;
     }
+    #panel-col.hidden { width: 0; opacity: 0; border-left: none; pointer-events: none; }
 
-    /* Hidden state */
-    #panel-col.hidden {
-      width: 0;
-      opacity: 0;
-      border-left: none;
-      pointer-events: none;
-    }
-
-    /* Symbol bar */
+    /* ── Symbol bar ── */
     #symbol-bar {
       padding: 10px 12px;
       border-bottom: 1px solid var(--border);
-      background: var(--surface);
-      flex-shrink: 0;
+      background: var(--surface); flex-shrink: 0;
     }
-    .bar-label {
-      font-size: 10px;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: .06em;
-      margin-bottom: 5px;
-    }
-    .sym-row {
-      display: flex;
-      gap: 5px;
-      align-items: center;
-      margin-bottom: 6px;
-    }
-    #sym-input {
-      flex: 1;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      color: var(--text);
-      font-size: 13px;
-      font-weight: 600;
-      padding: 5px 9px;
-      outline: none;
-      text-transform: uppercase;
-      min-width: 0;
-    }
-    #sym-input:focus { border-color: var(--accent); }
-
-    #broker-badge {
-      font-size: 10px;
-      font-weight: 700;
-      padding: 3px 7px;
-      border-radius: 4px;
-      background: var(--border2);
-      color: var(--accent);
-      white-space: nowrap;
-      flex-shrink: 0;
-    }
+    .bar-label { font-size: 10px; color: var(--muted); text-transform: uppercase;
+      letter-spacing: .06em; margin-bottom: 5px; }
 
     #sym-select {
-      width: 100%;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      color: var(--text);
-      font-size: 11px;
-      padding: 5px 8px;
-      margin-bottom: 6px;
+      width: 100%; background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--radius); color: var(--text); font-size: 12px;
+      padding: 6px 8px; margin-bottom: 6px; cursor: pointer;
+    }
+    #sym-select:focus { border-color: var(--accent); outline: none; }
+
+    .sym-display-row {
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--border2); border-radius: var(--radius);
+      padding: 5px 10px; margin-bottom: 6px;
+    }
+    #sym-display { font-size: 14px; font-weight: 800; color: var(--text); letter-spacing: .04em; }
+    #broker-badge {
+      font-size: 10px; font-weight: 700; padding: 3px 7px;
+      border-radius: 4px; background: var(--bg); color: var(--accent); white-space: nowrap;
     }
 
-    .action-row {
-      display: flex;
-      gap: 5px;
-      margin-bottom: 6px;
-    }
+    .action-row { display: flex; gap: 5px; margin-bottom: 6px; }
     .btn {
-      padding: 6px 10px;
-      border: none;
-      border-radius: var(--radius);
-      font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
-      flex: 1;
+      padding: 6px 10px; border: none; border-radius: var(--radius);
+      font-size: 12px; font-weight: 600; cursor: pointer; flex: 1;
     }
     .btn-primary  { background: var(--accent); color: #0d1117; }
     .btn-primary:hover  { opacity: .85; }
@@ -244,140 +123,66 @@
     .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
     .btn:disabled { opacity: .4; cursor: default; }
 
-    .toggle-row {
-      display: flex;
-      gap: 5px;
-      margin-bottom: 6px;
-    }
+    .toggle-row { display: flex; gap: 5px; margin-bottom: 6px; }
     .toggle-btn {
-      flex: 1;
-      padding: 4px;
-      border: 1px solid var(--border);
-      border-radius: 5px;
-      background: var(--bg);
-      color: var(--muted);
-      font-size: 11px;
-      cursor: pointer;
-      text-align: center;
+      flex: 1; padding: 4px; border: 1px solid var(--border); border-radius: 5px;
+      background: var(--bg); color: var(--muted); font-size: 11px; cursor: pointer; text-align: center;
     }
     .toggle-btn.active { border-color: var(--accent); color: var(--accent); background: #0f1c2e; }
 
-    .settings-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
+    .settings-row { display: flex; align-items: center; gap: 6px; }
     .settings-row label { font-size: 11px; color: var(--muted); white-space: nowrap; }
     .settings-row select {
-      flex: 1;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 5px;
-      color: var(--text);
-      font-size: 11px;
-      padding: 3px 6px;
+      flex: 1; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 5px; color: var(--text); font-size: 11px; padding: 3px 6px;
     }
 
-    /* Summary area */
+    /* ── Summary ── */
     #summary-area {
-      flex: 1;
-      overflow-y: auto;
-      padding: 10px 12px;
-      scrollbar-width: thin;
-      scrollbar-color: var(--border2) transparent;
+      flex: 1; overflow-y: auto; padding: 10px 12px;
+      scrollbar-width: thin; scrollbar-color: var(--border2) transparent;
     }
-
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border2);
-      border-radius: var(--radius);
-      padding: 10px 12px;
-      margin-bottom: 8px;
-    }
-    .card-title {
-      font-size: 10px;
-      font-weight: 700;
-      color: var(--accent);
-      text-transform: uppercase;
-      letter-spacing: .05em;
-      padding-bottom: 5px;
-      margin-bottom: 7px;
-      border-bottom: 1px solid var(--border2);
-    }
+    .card { background: var(--surface); border: 1px solid var(--border2);
+      border-radius: var(--radius); padding: 10px 12px; margin-bottom: 8px; }
+    .card-title { font-size: 10px; font-weight: 700; color: var(--accent);
+      text-transform: uppercase; letter-spacing: .05em;
+      padding-bottom: 5px; margin-bottom: 7px; border-bottom: 1px solid var(--border2); }
     .metric-grid { display: flex; flex-wrap: wrap; gap: 5px; }
-    .metric-box {
-      flex: 1; min-width: 55px;
-      background: var(--bg);
-      border: 1px solid var(--border2);
-      border-radius: 5px;
-      padding: 5px 7px;
-      text-align: center;
-    }
+    .metric-box { flex: 1; min-width: 55px; background: var(--bg); border: 1px solid var(--border2);
+      border-radius: 5px; padding: 5px 7px; text-align: center; }
     .metric-label { font-size: 9px; color: var(--muted); margin-bottom: 2px; }
     .metric-value { font-size: 12px; font-weight: 700; }
-    .bull { color: var(--bull); }
-    .bear { color: var(--bear); }
-    .warn { color: var(--warn); }
-
+    .bull { color: var(--bull); } .bear { color: var(--bear); } .warn { color: var(--warn); }
     .levels-row { display: flex; gap: 5px; margin-bottom: 7px; }
     .level-item { flex: 1; }
     .level-label { font-size: 9px; color: var(--muted); margin-bottom: 2px; }
     .level-value { font-size: 12px; font-weight: 700; }
-
     .targets-list { list-style: none; margin-top: 5px; }
     .targets-list li { padding: 2px 0; font-size: 11px; display: flex; justify-content: space-between; }
     .targets-list li span { color: var(--bull); font-weight: 700; }
-
     .kl-grid { display: flex; flex-wrap: wrap; gap: 4px 10px; }
     .kl-grid .kl { font-size: 11px; }
     .kl-grid .kl em { color: var(--muted); font-style: normal; }
-
     .summary-text { font-size: 11px; color: var(--muted); line-height: 1.6; }
-
-    .placeholder {
-      text-align: center;
-      color: var(--muted);
-      font-size: 12px;
-      padding: 36px 12px;
-      line-height: 1.9;
-    }
+    .placeholder { text-align: center; color: var(--muted); font-size: 12px;
+      padding: 36px 12px; line-height: 1.9; }
     .placeholder strong { color: var(--text); }
 
-    /* Token footer */
-    #token-footer {
-      padding: 4px 12px;
-      font-size: 10px;
-      color: var(--muted);
-      border-top: 1px solid var(--border2);
-      text-align: right;
-      flex-shrink: 0;
-    }
+    #token-footer { padding: 4px 12px; font-size: 10px; color: var(--muted);
+      border-top: 1px solid var(--border2); text-align: right; flex-shrink: 0; }
 
     /* Spinner */
-    .spinner-overlay {
-      display: none;
-      position: absolute;
-      inset: 0;
-      background: rgba(13,17,23,.75);
-      align-items: center;
-      justify-content: center;
-      z-index: 30;
-    }
+    .spinner-overlay { display: none; position: absolute; inset: 0;
+      background: rgba(13,17,23,.75); align-items: center; justify-content: center; z-index: 30; }
     .spinner-overlay.visible { display: flex; }
-    .spinner {
-      width: 26px; height: 26px;
-      border: 3px solid var(--border);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin .7s linear infinite;
-    }
+    .spinner { width: 26px; height: 26px; border: 3px solid var(--border);
+      border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
 <div id="shell">
 
-  <!-- ── Header ── -->
   <header>
     <h1>📈 Trade Assistant</h1>
     <span class="sep">|</span>
@@ -385,15 +190,14 @@
     <span id="status-text">connecting…</span>
     <div class="spacer"></div>
     <button id="btn-toggle-panel">
-      <span class="arrow" id="toggle-arrow">▶</span>
+      <span id="toggle-arrow">▶</span>
       <span id="toggle-label">Hide Panel</span>
     </button>
   </header>
 
-  <!-- ── Workspace ── -->
   <div id="workspace">
 
-    <!-- Chart column -->
+    <!-- Chart: full TradingView site in iframe -->
     <div id="chart-col">
       <div id="tf-bar">
         <span class="tf-label">TF</span>
@@ -407,56 +211,81 @@
         <button class="tf-btn" data-tf="D">1D</button>
         <button class="tf-btn" data-tf="W">1W</button>
       </div>
-      <div id="tv-container">
-        <div id="tv-widget"></div>
-      </div>
+      <iframe id="tv-frame" src="" allowfullscreen></iframe>
     </div>
 
     <!-- Right panel -->
     <div id="panel-col">
       <div class="spinner-overlay" id="spinner"><div class="spinner"></div></div>
 
-      <!-- Symbol bar -->
       <div id="symbol-bar">
         <div class="bar-label">Symbol</div>
-        <div class="sym-row">
-          <input id="sym-input" type="text" value="BTCUSDT" placeholder="e.g. BTCUSDT, RELIANCE" />
-          <span id="broker-badge">Delta</span>
-        </div>
 
         <select id="sym-select">
-          <option value="" disabled selected>Quick select…</option>
           <optgroup label="── Crypto (Delta) ──">
-            <option value="BTCUSDT">BTC/USDT</option>
-            <option value="ETHUSDT">ETH/USDT</option>
-            <option value="SOLUSDT">SOL/USDT</option>
-            <option value="BNBUSDT">BNB/USDT</option>
+            <option value="BTCUSDT" selected>BTC/USDT — Bitcoin</option>
+            <option value="ETHUSDT">ETH/USDT — Ethereum</option>
+            <option value="SOLUSDT">SOL/USDT — Solana</option>
+            <option value="BNBUSDT">BNB/USDT — BNB</option>
             <option value="XAUUSDT">XAU/USDT — Gold</option>
-            <option value="DOGEUSDT">DOGE/USDT</option>
-            <option value="AVAXUSDT">AVAX/USDT</option>
-            <option value="LINKUSDT">LINK/USDT</option>
+            <option value="DOGEUSDT">DOGE/USDT — Dogecoin</option>
+            <option value="AVAXUSDT">AVAX/USDT — Avalanche</option>
+            <option value="LINKUSDT">LINK/USDT — Chainlink</option>
+            <option value="MATICUSDT">MATIC/USDT — Polygon</option>
+            <option value="ADAUSDT">ADA/USDT — Cardano</option>
+            <option value="DOTUSDT">DOT/USDT — Polkadot</option>
+            <option value="XRPUSDT">XRP/USDT — Ripple</option>
+            <option value="LTCUSDT">LTC/USDT — Litecoin</option>
           </optgroup>
           <optgroup label="── Indices (Fyers) ──">
             <option value="NIFTY50">NIFTY 50</option>
             <option value="BANKNIFTY">BANK NIFTY</option>
             <option value="SENSEX">SENSEX</option>
+            <option value="MIDCPNIFTY">MIDCAP NIFTY</option>
+            <option value="FINNIFTY">FIN NIFTY</option>
           </optgroup>
-          <optgroup label="── NSE Equities ──">
-            <option value="RELIANCE">RELIANCE</option>
-            <option value="TCS">TCS</option>
+          <optgroup label="── Banking ──">
             <option value="HDFCBANK">HDFC BANK</option>
             <option value="ICICIBANK">ICICI BANK</option>
-            <option value="INFY">INFOSYS</option>
             <option value="SBIN">SBI</option>
             <option value="AXISBANK">AXIS BANK</option>
+            <option value="KOTAKBANK">KOTAK BANK</option>
+            <option value="INDUSINDBK">INDUSIND BANK</option>
+            <option value="RBLBANK">RBL BANK</option>
+            <option value="CANBK">CANARA BANK</option>
+            <option value="PNB">PNB</option>
+            <option value="BANKBARODA">BANK OF BARODA</option>
+          </optgroup>
+          <optgroup label="── IT / Tech ──">
+            <option value="TCS">TCS</option>
+            <option value="INFY">INFOSYS</option>
+            <option value="WIPRO">WIPRO</option>
+            <option value="HCLTECH">HCL TECH</option>
+            <option value="TECHM">TECH MAHINDRA</option>
+            <option value="LTIM">LTI MINDTREE</option>
+          </optgroup>
+          <optgroup label="── Large Cap ──">
+            <option value="RELIANCE">RELIANCE</option>
             <option value="BAJAJFINANCE">BAJAJ FINANCE</option>
             <option value="TATAMOTORS">TATA MOTORS</option>
-            <option value="WIPRO">WIPRO</option>
             <option value="MARUTI">MARUTI</option>
             <option value="ONGC">ONGC</option>
-            <option value="RBLBANK">RBL BANK</option>
+            <option value="NTPC">NTPC</option>
+            <option value="LT">L&amp;T</option>
+            <option value="SUNPHARMA">SUN PHARMA</option>
+            <option value="ADANIPORTS">ADANI PORTS</option>
+            <option value="ASIANPAINT">ASIAN PAINTS</option>
+            <option value="TITAN">TITAN</option>
+            <option value="HINDALCO">HINDALCO</option>
+            <option value="JSWSTEEL">JSW STEEL</option>
+            <option value="TATASTEEL">TATA STEEL</option>
           </optgroup>
         </select>
+
+        <div class="sym-display-row">
+          <span id="sym-display">BTCUSDT</span>
+          <span id="broker-badge">Delta</span>
+        </div>
 
         <div class="action-row">
           <button class="btn btn-primary"   id="btn-analyse">📊 Analyse</button>
@@ -475,9 +304,8 @@
             <option value="ollama">Ollama</option>
           </select>
         </div>
-      </div><!-- /symbol-bar -->
+      </div>
 
-      <!-- Analysis summary -->
       <div id="summary-area">
         <div class="placeholder">
           Select a symbol and click<br><strong>Analyse</strong> to load the trade setup.
@@ -485,25 +313,26 @@
       </div>
 
       <div id="token-footer">Tokens: —</div>
-    </div><!-- /panel-col -->
+    </div>
 
-  </div><!-- /workspace -->
-</div><!-- /shell -->
+  </div>
+</div>
 
 <script>
-/* ═══════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════
    State
-═══════════════════════════════════════════════════════════════ */
+═══════════════════════════════════════════════════ */
 const API = 'http://localhost:8100';
-let sessionId   = null;
-let tradeMode   = 'paper';
-let totalTokens = 0;
-let currentTf   = '5';
+let sessionId    = null;
+let tradeMode    = 'paper';
+let totalTokens  = 0;
+let currentTf    = '5';
 let panelVisible = true;
+let currentSym   = 'BTCUSDT';
 
-/* ═══════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════
    Symbol helpers
-═══════════════════════════════════════════════════════════════ */
+═══════════════════════════════════════════════════ */
 const DELTA_MAP = {
   BTC:'BTCUSDT', ETH:'ETHUSDT', SOL:'SOLUSDT', BNB:'BNBUSDT',
   XAU:'XAUUSDT', DOGE:'DOGEUSDT', AVAX:'AVAXUSDT',
@@ -513,178 +342,90 @@ const DELTA_SYMS = new Set([...Object.keys(DELTA_MAP), ...Object.values(DELTA_MA
 const NSE_TV = {
   NIFTY:'NSE:NIFTY', NIFTY50:'NSE:NIFTY',
   BANKNIFTY:'NSE:BANKNIFTY', SENSEX:'BSE:SENSEX',
+  MIDCPNIFTY:'NSE:MIDCPNIFTY', FINNIFTY:'NSE:FINNIFTY',
 };
 
-function detectBroker(raw) {
-  const s = raw.toUpperCase().replace(/\.P$/, '');
+function detectBroker(s) {
+  s = s.toUpperCase().replace(/\.P$/, '');
   if (DELTA_SYMS.has(s) || s.endsWith('USDT') || s.endsWith('PERP')) return 'delta';
   return 'fyers';
 }
 
-function toTVSymbol(raw) {
-  const s = raw.toUpperCase().replace(/\.P$/, '');
-  if (NSE_TV[s])           return NSE_TV[s];
-  if (DELTA_MAP[s])        return `BINANCE:${DELTA_MAP[s]}`;
-  if (s.endsWith('USDT'))  return `BINANCE:${s}`;
-  return `NSE:${s}`;
+function toTVSymbol(s) {
+  s = s.toUpperCase().replace(/\.P$/, '');
+  if (NSE_TV[s])          return NSE_TV[s];
+  if (DELTA_MAP[s])       return 'BINANCE:' + DELTA_MAP[s];
+  if (s.endsWith('USDT')) return 'BINANCE:' + s;
+  return 'NSE:' + s;
 }
 
-function toBackendSymbol(raw) {
-  const s = raw.toUpperCase().replace(/\.P$/, '');
+function toBackendSymbol(s) {
+  s = s.toUpperCase().replace(/\.P$/, '');
   return DELTA_MAP[s] || s;
 }
 
-function updateBadge(raw) {
-  const broker = detectBroker(raw);
-  brokerBadge.textContent = broker === 'delta' ? 'Delta' : 'Fyers NSE';
-  brokerBadge.style.color = broker === 'delta' ? '#60a5fa' : '#34d399';
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   TradingView — full widget, created once, updated via API
-═══════════════════════════════════════════════════════════════ */
-let tvWidget = null;
-
-function loadTVLib(cb) {
-  if (window.TradingView) { cb(); return; }
-  const s = document.createElement('script');
-  s.src = 'https://s3.tradingview.com/tv.js';
-  s.onload = cb;
-  document.head.appendChild(s);
-}
-
-function initChart(tvSym) {
-  loadTVLib(() => {
-    tvWidget = new TradingView.widget({
-      /* container */
-      container_id: 'tv-widget',
-      autosize: true,
-
-      /* symbol & interval */
-      symbol:   tvSym,
-      interval: currentTf,
-
-      /* locale & appearance */
-      timezone:  'Asia/Kolkata',
-      theme:     'dark',
-      style:     '1',
-      locale:    'in',
-
-      /* toolbars — show everything */
-      hide_top_toolbar:  false,
-      hide_side_toolbar: false,
-      hide_legend:       false,
-      withdateranges:    true,
-
-      /* symbol interaction */
-      allow_symbol_change: true,
-
-      /* feature flags — enable full feature set */
-      enabled_features: [
-        'study_templates',
-        'use_localstorage_for_settings',
-        'save_chart_properties_to_local_storage',
-        'create_volume_indicator_by_default',
-        'header_saveload',
-        'header_screenshot',
-        'header_undo_redo',
-        'show_chart_property_page',
-        'display_market_status',
-        'show_trading_notifications_history',
-        'side_toolbar_in_fullscreen_mode',
-      ],
-      disabled_features: [],
-
-      /* support */
-      support_host: 'https://www.tradingview.com',
-    });
-  });
-}
-
-function updateChart(tvSym) {
-  if (!tvWidget) { initChart(tvSym); return; }
-  tvWidget.onChartReady(() => {
-    tvWidget.activeChart().setSymbol(tvSym, () => {
-      tvWidget.activeChart().setResolution(currentTf);
-    });
-  });
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   Panel toggle
-═══════════════════════════════════════════════════════════════ */
-const panelCol    = document.getElementById('panel-col');
-const toggleBtn   = document.getElementById('btn-toggle-panel');
-const toggleArrow = document.getElementById('toggle-arrow');
-const toggleLabel = document.getElementById('toggle-label');
-
-toggleBtn.addEventListener('click', () => {
-  panelVisible = !panelVisible;
-  panelCol.classList.toggle('hidden', !panelVisible);
-  toggleArrow.textContent = panelVisible ? '▶' : '◀';
-  toggleLabel.textContent = panelVisible ? 'Hide Panel' : 'Show Panel';
-  // Nudge the TV widget to reflow after transition
-  setTimeout(() => {
-    if (tvWidget && tvWidget.iframe) {
-      tvWidget.iframe.style.width  = '100%';
-      tvWidget.iframe.style.height = '100%';
-    }
-  }, 260);
-});
-
-/* ═══════════════════════════════════════════════════════════════
-   Backend init
-═══════════════════════════════════════════════════════════════ */
-async function initSession() {
-  try {
-    const r = await fetch(`${API}/health`);
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    document.getElementById('status-dot').classList.add('ok');
-    document.getElementById('status-text').textContent = 'Backend connected';
-  } catch (e) {
-    document.getElementById('status-dot').classList.add('err');
-    document.getElementById('status-text').textContent = `Offline — ${e.message}`;
-  }
-  try {
-    const r = await fetch(`${API}/sessions/new`,
-      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-    if (r.ok) sessionId = (await r.json()).session_id;
-  } catch (_) {}
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   Symbol input & dropdown
-═══════════════════════════════════════════════════════════════ */
-const symInput    = document.getElementById('sym-input');
+/* ═══════════════════════════════════════════════════
+   Apply symbol — updates state, badge, display, chart
+═══════════════════════════════════════════════════ */
+const symDisplay  = document.getElementById('sym-display');
 const brokerBadge = document.getElementById('broker-badge');
+const tvFrame     = document.getElementById('tv-frame');
 
-symInput.addEventListener('input', () => updateBadge(symInput.value || 'BTCUSDT'));
-symInput.addEventListener('keydown', e => {
-  if (e.key === 'Enter') document.getElementById('btn-analyse').click();
-});
+function applySymbol(raw) {
+  currentSym = raw.toUpperCase().replace(/\.P$/, '');
+  const broker = detectBroker(currentSym);
+  symDisplay.textContent   = currentSym;
+  brokerBadge.textContent  = broker === 'delta' ? 'Delta' : 'Fyers NSE';
+  brokerBadge.style.color  = broker === 'delta' ? '#60a5fa' : '#34d399';
+  loadTVFrame();
+}
 
-document.getElementById('sym-select').addEventListener('change', function () {
-  symInput.value = this.value;
-  updateBadge(this.value);
-  updateChart(toTVSymbol(this.value));
-  this.value = '';   // reset dropdown so it can be re-selected
-});
+/* ═══════════════════════════════════════════════════
+   TradingView — full site iframe
+   URL: https://www.tradingview.com/chart/?symbol=BINANCE:BTCUSDT&interval=5
+═══════════════════════════════════════════════════ */
+function tvURL() {
+  return 'https://www.tradingview.com/chart/?symbol='
+    + encodeURIComponent(toTVSymbol(currentSym))
+    + '&interval=' + currentTf;
+}
 
-/* ═══════════════════════════════════════════════════════════════
-   Timeframe buttons
-═══════════════════════════════════════════════════════════════ */
+function loadTVFrame() {
+  tvFrame.src = tvURL();
+}
+
+/* ═══════════════════════════════════════════════════
+   TF buttons
+═══════════════════════════════════════════════════ */
 document.querySelectorAll('.tf-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentTf = btn.dataset.tf;
-    updateChart(toTVSymbol(symInput.value || 'BTCUSDT'));
+    loadTVFrame();
   });
 });
 
-/* ═══════════════════════════════════════════════════════════════
-   Trade mode toggles
-═══════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════
+   Symbol dropdown
+═══════════════════════════════════════════════════ */
+document.getElementById('sym-select').addEventListener('change', function () {
+  applySymbol(this.value);
+});
+
+/* ═══════════════════════════════════════════════════
+   Panel toggle
+═══════════════════════════════════════════════════ */
+document.getElementById('btn-toggle-panel').addEventListener('click', () => {
+  panelVisible = !panelVisible;
+  document.getElementById('panel-col').classList.toggle('hidden', !panelVisible);
+  document.getElementById('toggle-arrow').textContent = panelVisible ? '▶' : '◀';
+  document.getElementById('toggle-label').textContent = panelVisible ? 'Hide Panel' : 'Show Panel';
+});
+
+/* ═══════════════════════════════════════════════════
+   Trade mode
+═══════════════════════════════════════════════════ */
 document.querySelectorAll('.toggle-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
@@ -693,25 +434,41 @@ document.querySelectorAll('.toggle-btn').forEach(btn => {
   });
 });
 
-/* ═══════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════
+   Backend init
+═══════════════════════════════════════════════════ */
+async function initSession() {
+  try {
+    const r = await fetch(API + '/health');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    document.getElementById('status-dot').classList.add('ok');
+    document.getElementById('status-text').textContent = 'Backend connected';
+  } catch (e) {
+    document.getElementById('status-dot').classList.add('err');
+    document.getElementById('status-text').textContent = 'Offline — ' + e.message;
+  }
+  try {
+    const r = await fetch(API + '/sessions/new',
+      { method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' });
+    if (r.ok) sessionId = (await r.json()).session_id;
+  } catch (_) {}
+}
+
+/* ═══════════════════════════════════════════════════
    Analyse / Execute
-═══════════════════════════════════════════════════════════════ */
+═══════════════════════════════════════════════════ */
 document.getElementById('btn-analyse').addEventListener('click', () => runAction('analyse'));
 document.getElementById('btn-execute').addEventListener('click', () => runAction('execute'));
 
 async function runAction(type) {
-  const raw    = symInput.value.trim() || 'BTCUSDT';
-  const sym    = toBackendSymbol(raw);
-  const tvSym  = toTVSymbol(raw);
-  const llm    = document.getElementById('llm-select').value;
-  const msg    = `${type === 'analyse' ? 'Analyse' : 'Execute trade on'} ${sym} for intraday trade`;
+  const sym = toBackendSymbol(currentSym);
+  const llm = document.getElementById('llm-select').value;
+  const msg = (type === 'analyse' ? 'Analyse ' : 'Execute trade on ') + sym + ' for intraday trade';
 
-  updateChart(tvSym);
   setLoading(true);
-
   try {
-    const r = await fetch(`${API}/chat`, {
-      method:  'POST',
+    const r = await fetch(API + '/chat', {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message:      msg,
@@ -724,10 +481,10 @@ async function runAction(type) {
     if (data) {
       totalTokens += data.tokens_used || 0;
       document.getElementById('token-footer').textContent =
-        `Session: ${data.session_tokens || totalTokens} tokens`;
-      renderSummary(data.analysis || {}, data.execution || {}, raw.toUpperCase());
+        'Session: ' + (data.session_tokens || totalTokens) + ' tokens';
+      renderSummary(data.analysis || {}, data.execution || {}, currentSym);
     } else {
-      renderError(`HTTP ${r.status}`);
+      renderError('HTTP ' + r.status);
     }
   } catch (e) {
     renderError(e.message);
@@ -742,33 +499,32 @@ function setLoading(on) {
   document.getElementById('btn-execute').disabled = on;
 }
 
-/* ═══════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════
    Summary cards
-═══════════════════════════════════════════════════════════════ */
+═══════════════════════════════════════════════════ */
 function renderError(msg) {
   document.getElementById('summary-area').innerHTML =
-    `<div class="placeholder" style="color:var(--bear)">❌ ${esc(msg)}</div>`;
+    '<div class="placeholder" style="color:var(--bear)">❌ ' + esc(msg) + '</div>';
 }
 
 function renderSummary(a, e, sym) {
   const area = document.getElementById('summary-area');
   area.innerHTML = '';
-
   if (!a || !Object.keys(a).length) {
-    area.innerHTML = `<div class="placeholder">No analysis returned.<br>Check backend logs.</div>`;
+    area.innerHTML = '<div class="placeholder">No analysis returned.<br>Check backend logs.</div>';
     return;
   }
 
-  const trend  = (a.trend || '—').toUpperCase();
-  const tCls   = /BULL|UP/.test(trend) ? 'bull' : /BEAR|DOWN/.test(trend) ? 'bear' : 'warn';
-  const tIcon  = tCls === 'bull' ? '↑' : tCls === 'bear' ? '↓' : '→';
+  const trend = (a.trend || '—').toUpperCase();
+  const tCls  = /BULL|UP/.test(trend) ? 'bull' : /BEAR|DOWN/.test(trend) ? 'bear' : 'warn';
+  const tIcon = tCls === 'bull' ? '↑' : tCls === 'bear' ? '↓' : '→';
 
   area.appendChild(card('📊 Setup — ' + (a.symbol || sym), `
     <div class="metric-grid">
-      ${mb('Trend',      `<span class="${tCls}">${trend} ${tIcon}</span>`)}
-      ${mb('Strength',   esc(a.strength   || '—'))}
-      ${mb('Price',      esc(a.last_price || '—'))}
-      ${mb('Conf',       esc(a.confidence || '—'))}
+      ${mb('Trend',    '<span class="' + tCls + '">' + trend + ' ' + tIcon + '</span>')}
+      ${mb('Strength', esc(a.strength   || '—'))}
+      ${mb('Price',    esc(a.last_price || '—'))}
+      ${mb('Conf',     esc(a.confidence || '—'))}
     </div>`));
 
   const targets = Array.isArray(a.targets) ? a.targets : [];
@@ -789,21 +545,20 @@ function renderSummary(a, e, sym) {
     </div>
     <div class="level-label" style="margin-bottom:3px">TARGETS</div>
     <ul class="targets-list">
-      ${targets.map((t, i) => `<li>T${i+1} <span>${esc(String(t))}</span></li>`).join('') || '<li>—</li>'}
+      ${targets.map((t,i) => '<li>T'+(i+1)+' <span>'+esc(String(t))+'</span></li>').join('') || '<li>—</li>'}
     </ul>`));
 
   const kl = a.key_levels;
   if (kl && typeof kl === 'object' && Object.keys(kl).length) {
-    area.appendChild(card('📐 Key Levels', `
-      <div class="kl-grid">
-        ${Object.entries(kl).map(([k,v]) =>
-          `<div class="kl"><em>${esc(k)}:</em> <strong>${esc(String(v))}</strong></div>`
-        ).join('')}
-      </div>`));
+    area.appendChild(card('📐 Key Levels',
+      '<div class="kl-grid">' +
+      Object.entries(kl).map(([k,v]) =>
+        '<div class="kl"><em>'+esc(k)+':</em> <strong>'+esc(String(v))+'</strong></div>'
+      ).join('') + '</div>'));
   }
 
   if (a.summary)
-    area.appendChild(card('💬 Analysis', `<div class="summary-text">${esc(a.summary)}</div>`));
+    area.appendChild(card('💬 Analysis', '<div class="summary-text">'+esc(a.summary)+'</div>'));
 
   if (e && Object.keys(e).length) {
     const action = (e.action || '—').toUpperCase();
@@ -811,40 +566,33 @@ function renderSummary(a, e, sym) {
     const mode   = (e.mode || 'paper').toUpperCase();
     area.appendChild(card('⚡ Execution', `
       <div class="metric-grid" style="margin-bottom:7px">
-        ${mb('Action', `<span class="${aCls}">${esc(action)}</span>`)}
+        ${mb('Action', '<span class="'+aCls+'">'+esc(action)+'</span>')}
         ${mb('Qty',    esc(String(e.qty || '—')))}
         ${mb('Order',  esc(e.order_type || '—'))}
-        ${mb('Mode',   `<span style="color:${mode==='REAL'?'var(--bear)':'var(--bull)'}">${esc(mode)}</span>`)}
+        ${mb('Mode',   '<span style="color:'+(mode==='REAL'?'var(--bear)':'var(--bull)')+'">'+esc(mode)+'</span>')}
       </div>
-      ${e.rationale ? `<div class="summary-text">${esc(e.rationale)}</div>` : ''}`));
+      ${e.rationale ? '<div class="summary-text">'+esc(e.rationale)+'</div>' : ''}`));
   }
 }
 
 function card(title, body) {
   const d = document.createElement('div');
   d.className = 'card';
-  d.innerHTML = `<div class="card-title">${esc(title)}</div>${body}`;
+  d.innerHTML = '<div class="card-title">'+esc(title)+'</div>'+body;
   return d;
 }
-
 function mb(label, valueHtml) {
-  return `<div class="metric-box">
-    <div class="metric-label">${esc(label)}</div>
-    <div class="metric-value">${valueHtml}</div>
-  </div>`;
+  return '<div class="metric-box"><div class="metric-label">'+esc(label)+'</div><div class="metric-value">'+valueHtml+'</div></div>';
 }
-
 function esc(s) {
-  return String(s)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-/* ═══════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════
    Boot
-═══════════════════════════════════════════════════════════════ */
+═══════════════════════════════════════════════════ */
 initSession();
-initChart(toTVSymbol(symInput.value));
+applySymbol('BTCUSDT');
 </script>
 </body>
 </html>
