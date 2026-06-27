@@ -341,7 +341,7 @@ class KronosAgent:
         model_path = (
             __import__("pathlib").Path(__file__).resolve().parents[2]
             / self._MODEL_DIR
-            / f"kronos_{symbol}_{interval}.json"
+            / f"kronos_{symbol.replace(':', '_').replace('-', '_')}_{interval}.json"
         )
         if not model_path.exists():
             logger.debug("No trained model at %s — using rule-based score", model_path)
