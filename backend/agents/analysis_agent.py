@@ -1,11 +1,6 @@
-"""Analysis Agent — fetches market data via MCP and produces structured analysis.
+"""Analysis Agent — fetches market data via MCP and produces structured analysis."""
 
-Fully decoupled:
-  - LLM provider injected via task.input["llm_provider"] (no LLMFactory import at top level)
-  - MCP calls only here, not in orchestrator
-  - No direct dependency on settings / config
-"""
-
+import asyncio
 import json
 import logging
 import re
@@ -47,10 +42,11 @@ Respond ONLY with valid JSON matching this schema:
 
 _AUTH_KEYWORDS = ("expired", "invalid", "auth", "token", "unauthorized", "403", "401")
 
+# Use lowercase "1d" — consistent with DeltaSource.INTERVAL_MAP
 _INTERVAL_MAP = {
     ("swing",    "5m"):  "1h",
-    ("longterm", "5m"):  "1D",
-    ("longterm", "1h"):  "1D",
+    ("longterm", "5m"):  "1d",
+    ("longterm", "1h"):  "1d",
 }
 
 
@@ -77,11 +73,24 @@ def _build_prompt(
     symbol: str, trade_type: str, interval: str,
     candle_data: dict, market_extra: dict, news_context: str,
 ) -> str:
-    recent = (candle_data.get("candles") or [])[-20:]
+    candles = candle_data.get("candles") or []
+    recent  = candles[-20:]   # send all 20 candles, not just 5
+    # Compute simple OHLC summary stats for richer context
+    if recent:
+        highs  = [c.get("high", 0)  for c in recent]
+        lows   = [c.get("low", 0)   for c in recent]
+        closes = [c.get("close", 0) for c in recent]
+        period_high = max(highs)
+        period_low  = min(lows)
+        avg_close   = sum(closes) / len(closes)
+    else:
+        period_high = period_low = avg_close = "N/A"
+
     lines = [
         f"Symbol: {symbol}  Trade type: {trade_type.upper()}  Interval: {interval}",
         f"Last close: {candle_data.get('last_close', 'N/A')}",
-        f"Recent candles (last {len(recent)}): {json.dumps(recent[:5])} ... [{len(recent)} bars total]",
+        f"Period range ({len(recent)} bars): High={period_high}  Low={period_low}  Avg close={avg_close:.2f}" if recent else "No candle data",
+        f"Recent {len(recent)} candles (OHLCV): {json.dumps(recent)}",
     ]
     if market_extra.get("funding_signal"):
         lines += [
@@ -101,49 +110,42 @@ def _build_prompt(
 
 
 def _get_llm(provider: str):
-    """Lazy-import LLMFactory to keep analysis_agent decoupled at module level."""
     from backend.llm.factory import LLMFactory
     return LLMFactory.get_llm(provider or "openai")
 
 
 class AnalysisAgent:
-    """Fetches data via MCP and calls LLM to produce trade analysis.
-
-    LLM provider is resolved at call time from task.input["llm_provider"],
-    not imported at module level — keeps this module decoupled from config.
-    """
+    """Fetches data via MCP and calls LLM to produce trade analysis."""
 
     agent_name = "analysis_agent"
 
     async def handle_task(self, task: Task) -> TaskResponse:
-        inp        = task.input or {}
-        symbol     = inp.get("symbol", "BTCUSDT")
-        trade_type = inp.get("trade_type", "intraday")
-        source     = inp.get("source", "delta")
-        interval   = _resolve_interval(trade_type, inp.get("interval", "5m"))
+        inp          = task.input or {}
+        symbol       = inp.get("symbol", "BTCUSDT")
+        trade_type   = inp.get("trade_type", "intraday")
+        source       = inp.get("source", "delta")
+        interval     = _resolve_interval(trade_type, inp.get("interval", "5m"))
         llm_provider = inp.get("llm_provider", "openai")
 
         logger.info("analysis_agent START  symbol=%s  type=%s  source=%s  interval=%s  llm=%s",
                     symbol, trade_type, source, interval, llm_provider)
 
         # Fetch candles, market extras, and news in parallel
-        import asyncio
-        candle_task  = asyncio.create_task(self._fetch_candles(symbol, source, interval))
-        extra_task   = asyncio.create_task(self._fetch_market_extra(symbol, source))
-        news_task    = asyncio.create_task(self._fetch_news(symbol))
         (candle_data, auth_err), market_extra, news_context = await asyncio.gather(
-            candle_task, extra_task, news_task,
+            self._fetch_candles(symbol, source, interval),
+            self._fetch_market_extra(symbol, source),
+            self._fetch_news(symbol),
         )
 
         if auth_err:
             return TaskResponse(task_id=task.task_id, agent=self.agent_name,
                                 status="failed", error=auth_err)
 
-        # Build prompt and call LLM (lazy-loaded, no top-level import)
         prompt = _build_prompt(symbol, trade_type, interval,
                                candle_data, market_extra, news_context)
-        logger.info("► Calling LLM  provider=%s", llm_provider)
-        llm = _get_llm(llm_provider)
+        logger.info("► Calling LLM  provider=%s  candles=%d",
+                    llm_provider, len(candle_data.get("candles") or []))
+        llm      = _get_llm(llm_provider)
         response = await llm.ainvoke([
             SystemMessage(content=_SYSTEM),
             HumanMessage(content=prompt),
@@ -177,7 +179,6 @@ class AnalysisAgent:
                     f"Authentication failed for {source.upper()}. "
                     f"Please refresh your access token and update .env.\nDetails: {err}"
                 )
-            # Non-auth error (timeout, network) — log warning but don't fail the whole request
             logger.warning("analysis_agent: candle fetch warning — %s", err)
             return {"error": err, "candles": [], "last_close": None}, None
         return data, None
@@ -197,8 +198,8 @@ class AnalysisAgent:
     async def _fetch_news(self, symbol: str) -> str:
         logger.info("► Fetching news  symbol=%s", symbol)
         clean = symbol.replace("NSE:", "").replace("-EQ", "").split("/")[0]
-        raw  = await call_mcp_tool("tavily", "search_news",
-                                   {"query": f"{clean} stock analysis", "max_results": 3})
-        data = json.loads(raw)
+        raw   = await call_mcp_tool("tavily", "search_news",
+                                    {"query": f"{clean} stock analysis", "max_results": 3})
+        data  = json.loads(raw)
         headlines = [r.get("title", "") for r in data.get("results", []) if r.get("title")]
         return " | ".join(headlines[:3]) or "No recent news"

@@ -6,26 +6,32 @@ import logging
 import os
 from typing import Any
 
-from backend.config import settings
-
 logger = logging.getLogger(__name__)
 
-_SERVERS = {
-    "delta":  (settings.DELTA_MCP_COMMAND,  settings.DELTA_MCP_ARGS),
-    "fyers":  (settings.FYERS_MCP_COMMAND,  settings.FYERS_MCP_ARGS),
-    "tavily": (settings.TAVILY_MCP_COMMAND, settings.TAVILY_MCP_ARGS),
-}
-
-# Per-tool timeouts (seconds). Delta/Fyers API calls can be slow; news is fast.
+# Per-tool timeouts (seconds).
 _TOOL_TIMEOUTS: dict[str, float] = {
-    "fetch_candles":            25.0,
-    "fetch_perpetual_metrics":  15.0,
-    "get_quote":                15.0,
-    "get_mark_price":           10.0,
-    "search_news":              15.0,
-    "search_market":            15.0,
+    "fetch_candles":           25.0,
+    "fetch_perpetual_metrics": 15.0,
+    "get_quote":               15.0,
+    "get_mark_price":          10.0,
+    "search_news":             15.0,
+    "search_market":           15.0,
 }
 _DEFAULT_TIMEOUT = 20.0
+
+
+def _get_server_cmd(server: str) -> tuple[str, list[str]]:
+    """Resolve MCP server command lazily so settings are fully loaded first."""
+    from backend.config import settings
+    _map = {
+        "delta":  (settings.DELTA_MCP_COMMAND,  settings.DELTA_MCP_ARGS),
+        "fyers":  (settings.FYERS_MCP_COMMAND,  settings.FYERS_MCP_ARGS),
+        "tavily": (settings.TAVILY_MCP_COMMAND, settings.TAVILY_MCP_ARGS),
+    }
+    if server not in _map:
+        raise KeyError(server)
+    cmd, args_str = _map[server]
+    return cmd, (args_str.split(",") if args_str else [])
 
 
 async def call_mcp_tool(server: str, tool: str, arguments: dict[str, Any] | None = None) -> str:
@@ -38,12 +44,12 @@ async def call_mcp_tool(server: str, tool: str, arguments: dict[str, Any] | None
     except ImportError:
         return json.dumps({"error": "mcp package not installed — pip install mcp"})
 
-    if server not in _SERVERS:
+    try:
+        cmd, args = _get_server_cmd(server)
+    except KeyError:
         return json.dumps({"error": f"Unknown server {server!r} — use delta|fyers|tavily"})
 
-    cmd, args_str = _SERVERS[server]
-    args = args_str.split(",") if args_str else []
-
+    from backend.config import settings
     env = dict(os.environ)
     project_root = str(__import__("pathlib").Path(__file__).resolve().parents[2])
     env["PYTHONPATH"] = project_root + os.pathsep + env.get("PYTHONPATH", "")
@@ -62,7 +68,7 @@ async def call_mcp_tool(server: str, tool: str, arguments: dict[str, Any] | None
         env["TAVILY_API_KEY"] = settings.TAVILY_API_KEY
 
     timeout = _TOOL_TIMEOUTS.get(tool, _DEFAULT_TIMEOUT)
-    client = MCPClient(command=cmd, args=args, env=env)
+    client  = MCPClient(command=cmd, args=args, env=env)
     try:
         logger.info("MCP call  server=%s  tool=%s  args=%s  timeout=%ss",
                     server, tool, list((arguments or {}).keys()), timeout)

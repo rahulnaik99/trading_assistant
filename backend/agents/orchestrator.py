@@ -86,9 +86,16 @@ def _normalise(raw: str) -> tuple[str, str]:
         if k in s:
             return v, "delta"
     sym = raw.upper().replace(" ", "")
-    if not sym.endswith("USDT") and not sym.startswith("NSE:"):
-        sym += "USDT"
-    return sym, "delta"
+    # Only append USDT if it's clearly a crypto symbol (not an NSE equity).
+    # A bare uppercase word like RBLBANK must NOT become RBLBANKUSDT.
+    # Heuristic: known USDT pattern, or already has exchange prefix.
+    if sym.startswith("NSE:") or sym.startswith("BSE:"):
+        return sym, "fyers"
+    if sym.endswith("USDT") or sym.endswith("USD") or sym.endswith("PERP"):
+        return sym, "delta"
+    # Unknown symbol — treat as NSE equity rather than blindly appending USDT
+    logger.warning("_normalise: unknown symbol %r — treating as NSE equity", raw)
+    return sym, "fyers"
 
 
 def _build_result(intent: str, symbol: str, source: str, trade_type: str) -> dict[str, Any]:
@@ -239,6 +246,16 @@ class OrchestratorAgent:
     ) -> dict[str, Any]:
         logger.info("► AnalysisAgent (for execution)  symbol=%s", symbol)
         analysis, _ = await self._call_analysis(task_id, symbol, source, trade_type)
+
+        # Hard confidence floor — LLM prompt alone is not enough of a guard
+        confidence = float(analysis.get("confidence", 0))
+        if confidence < 0.55:
+            logger.warning("Execution blocked: confidence %.2f < 0.55  symbol=%s", confidence, symbol)
+            return {
+                "analysis": analysis,
+                "reply": f"⚠️ Execution blocked — confidence {confidence:.0%} is below the 55% threshold. "
+                         f"Trend is {analysis.get('trend','unknown')}. No order placed.",
+            }
 
         logger.info("► ExecutionAgent  url=%s  symbol=%s  mode=%s",
                     settings.EXECUTION_AGENT_URL, symbol, self._mode)

@@ -92,10 +92,15 @@ class ExecutionAgent:
         plan         = await self._build_plan(analysis, source, mode, llm_provider)
         plan["mode"] = mode
         plan["symbol"] = symbol
-        action       = str(plan.get("action", "hold")).lower()
 
-        logger.info("execution_agent: action=%s  entry=%s  sl=%s  tp=%s",
-                    action, plan.get("entry"), plan.get("stop_loss"), plan.get("take_profit"))
+        # Override LLM-hallucinated qty with a real risk-based calculation
+        plan = self._apply_position_sizing(plan, analysis)
+
+        action = str(plan.get("action", "hold")).lower()
+
+        logger.info("execution_agent: action=%s  entry=%s  sl=%s  tp=%s  qty=%s",
+                    action, plan.get("entry"), plan.get("stop_loss"),
+                    plan.get("take_profit"), plan.get("qty"))
 
         order_result = await self._execute(plan, symbol, source, action, mode, task.task_id)
         result       = {**plan, "order_result": order_result, "analysis_used": analysis}
@@ -104,6 +109,30 @@ class ExecutionAgent:
             task_id=task.task_id, agent=self.agent_name, status="completed",
             artifacts=[Artifact(type="execution", data=result)],
         )
+
+    def _apply_position_sizing(self, plan: dict, analysis: dict) -> dict:
+        """Replace LLM-hallucinated qty with a deterministic risk-based calculation.
+
+        Uses 1% risk on a 100,000 INR / $1,000 account.
+        qty = floor(risk_amount / abs(entry - stop_loss))
+        Minimum qty is always 1.
+        """
+        try:
+            entry = float(plan.get("entry") or analysis.get("entry_zone", {}).get("low") or 0)
+            sl    = float(plan.get("stop_loss") or analysis.get("stop_loss") or 0)
+            if entry > 0 and sl > 0 and entry != sl:
+                account_size = 100_000.0
+                risk_pct     = 0.01
+                risk_amount  = account_size * risk_pct          # 1,000
+                risk_per_unit = abs(entry - sl)
+                qty = max(1, int(risk_amount / risk_per_unit))
+                plan["qty"]         = qty
+                plan["risk_amount"] = round(risk_per_unit * qty, 2)
+                logger.info("position_sizing: entry=%.4f  sl=%.4f  risk/unit=%.4f  qty=%d",
+                            entry, sl, risk_per_unit, qty)
+        except Exception as exc:
+            logger.warning("position_sizing failed, keeping LLM qty: %s", exc)
+        return plan
 
     async def _build_plan(
         self, analysis: dict, source: str, mode: str, llm_provider: str

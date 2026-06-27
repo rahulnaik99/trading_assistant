@@ -4,7 +4,18 @@ A split-panel trading assistant with a live TradingView chart on the left and an
 
 ---
 
-## Quick Start
+## Recent Fixes (codebase audit)
+
+| # | File | Fix |
+|---|---|---|
+| 1 | `backend/agents/trade_agent/` | Deleted — dead code, broken import, duplicates ExecutionAgent |
+| 2 | `backend/agents/analysis_agent.py` | `asyncio` moved to top-level import; `_INTERVAL_MAP` uses lowercase `1d`; LLM now receives all 20 candles with period high/low/avg instead of 5 |
+| 3 | `backend/mcp/connector.py` | `_SERVERS` dict moved inside `_get_server_cmd()` — resolved lazily so settings are fully loaded before first call |
+| 4 | `backend/agents/orchestrator.py` | `_normalise()` no longer appends `USDT` to unknown symbols (NSE equities like `RBLBANK` were becoming `RBLBANKUSDT`); hard 55% confidence floor added in `_handle_execute()` before any order is sent |
+| 5 | `backend/agents/execution_agent.py` | Deterministic position sizing: `qty = floor(risk_amount / abs(entry - sl))` at 1% risk on ₹1,00,000 — replaces LLM-hallucinated qty |
+| 6 | `backend/a2a/client.py` | Retry logic: up to 2 retries with 1.5× exponential back-off on `ConnectError`, `TimeoutException`, `RemoteProtocolError` |
+
+
 
 ```bash
 cd trade_assistant
