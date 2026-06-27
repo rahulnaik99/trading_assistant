@@ -72,10 +72,10 @@ def _parse_json_response(raw: str, symbol: str) -> dict[str, Any]:
 def _build_prompt(
     symbol: str, trade_type: str, interval: str,
     candle_data: dict, market_extra: dict, news_context: str,
+    kronos: dict | None = None,
 ) -> str:
     candles = candle_data.get("candles") or []
-    recent  = candles[-20:]   # send all 20 candles, not just 5
-    # Compute simple OHLC summary stats for richer context
+    recent  = candles[-20:]
     if recent:
         highs  = [c.get("high", 0)  for c in recent]
         lows   = [c.get("low", 0)   for c in recent]
@@ -92,6 +92,27 @@ def _build_prompt(
         f"Period range ({len(recent)} bars): High={period_high}  Low={period_low}  Avg close={avg_close:.2f}" if recent else "No candle data",
         f"Recent {len(recent)} candles (OHLCV): {json.dumps(recent)}",
     ]
+
+    # Kronos technical context — pre-computed indicators, patterns, CPR
+    if kronos:
+        sig = kronos.get("signal", {})
+        lines += [
+            "",
+            "=== KRONOS TECHNICAL CONTEXT ===",
+            f"Trend (EMA9/21/50): {kronos.get('trend','?').upper()}",
+            f"EMA9={kronos.get('ema9')}  EMA21={kronos.get('ema21')}  EMA50={kronos.get('ema50')}  SMA200={kronos.get('sma200')}",
+            f"RSI(14): {kronos.get('rsi')}  ({sig.get('rsi_zone','?').upper()})",
+            f"ATR(14): {kronos.get('atr')}",
+            f"Support: {kronos.get('support')}  Resistance: {kronos.get('resistance')}",
+            f"CPR: {json.dumps(kronos.get('cpr', {}))}  Position: {sig.get('cpr_position','?').upper()}",
+            f"Volume signal: {kronos.get('volume_signal','?').upper()}",
+            f"Candlestick patterns: {kronos.get('patterns', [])}",
+            f"  Bullish: {sig.get('bull_patterns',[])}",
+            f"  Bearish: {sig.get('bear_patterns',[])}",
+            f"Composite bias: {sig.get('bias','?').upper()}  (score={sig.get('score',0)})",
+            "=================================",
+        ]
+
     if market_extra.get("funding_signal"):
         lines += [
             "",
@@ -130,11 +151,12 @@ class AnalysisAgent:
         logger.info("analysis_agent START  symbol=%s  type=%s  source=%s  interval=%s  llm=%s",
                     symbol, trade_type, source, interval, llm_provider)
 
-        # Fetch candles, market extras, and news in parallel
-        (candle_data, auth_err), market_extra, news_context = await asyncio.gather(
+        # Fetch candles, market extras, news, and Kronos TA — all in parallel
+        (candle_data, auth_err), market_extra, news_context, kronos_ctx = await asyncio.gather(
             self._fetch_candles(symbol, source, interval),
             self._fetch_market_extra(symbol, source),
             self._fetch_news(symbol),
+            self._fetch_kronos(symbol, source, interval),
         )
 
         if auth_err:
@@ -142,9 +164,11 @@ class AnalysisAgent:
                                 status="failed", error=auth_err)
 
         prompt = _build_prompt(symbol, trade_type, interval,
-                               candle_data, market_extra, news_context)
-        logger.info("► Calling LLM  provider=%s  candles=%d",
-                    llm_provider, len(candle_data.get("candles") or []))
+                               candle_data, market_extra, news_context,
+                               kronos=kronos_ctx)
+        logger.info("► Calling LLM  provider=%s  candles=%d  kronos=%s",
+                    llm_provider, len(candle_data.get("candles") or []),
+                    bool(kronos_ctx))
         llm      = _get_llm(llm_provider)
         response = await llm.ainvoke([
             SystemMessage(content=_SYSTEM),
@@ -153,10 +177,11 @@ class AnalysisAgent:
 
         analysis = _parse_json_response(response.content.strip(), symbol)
         analysis.update({
-            "symbol":       symbol,
-            "trade_type":   trade_type,
-            "news_context": news_context,
-            "raw_candles":  (candle_data.get("candles") or [])[-10:],
+            "symbol":        symbol,
+            "trade_type":    trade_type,
+            "news_context":  news_context,
+            "raw_candles":   (candle_data.get("candles") or [])[-10:],
+            "kronos":        kronos_ctx,  # pass through for frontend display
         })
 
         logger.info("analysis_agent END  symbol=%s  trend=%s  confidence=%s",
@@ -203,3 +228,33 @@ class AnalysisAgent:
         data  = json.loads(raw)
         headlines = [r.get("title", "") for r in data.get("results", []) if r.get("title")]
         return " | ".join(headlines[:3]) or "No recent news"
+
+    async def _fetch_kronos(self, symbol: str, source: str, interval: str) -> dict | None:
+        """Call KronosAgent via A2A (port 8103); fall back to in-process on failure."""
+        from backend.config import settings
+        from backend.a2a.client import A2AClient
+        from backend.protocol import Task as _Task
+
+        input_data = {"symbol": symbol, "source": source, "interval": interval}
+
+        # Try A2A first
+        client = A2AClient(settings.KRONOS_AGENT_URL, timeout=30.0, retries=1)
+        resp   = await client.send(
+            agent="kronos_agent", input_data=input_data, task_id=f"k-{symbol}"
+        )
+        if resp.status == "completed":
+            return next((a.data for a in resp.artifacts if a.type == "kronos_context"), None)
+
+        # Fallback: in-process
+        logger.warning("KronosAgent A2A unavailable — running in-process")
+        try:
+            from backend.agents.kronos_agent import KronosAgent
+            agent = KronosAgent()
+            local = await agent.handle_task(
+                _Task(task_id=f"k-local-{symbol}", agent="kronos_agent", input=input_data)
+            )
+            if local.status == "completed":
+                return next((a.data for a in local.artifacts if a.type == "kronos_context"), None)
+        except Exception as exc:
+            logger.warning("KronosAgent in-process fallback failed: %s", exc)
+        return None

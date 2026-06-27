@@ -16,6 +16,10 @@ SERVICES = {
         "cmd":   [sys.executable, "-m", "services.execution_agent_service", "--port", "8102"],
         "label": "Execution Agent  A2A :8102",
     },
+    "kronos": {
+        "cmd":   [sys.executable, "-m", "services.kronos_agent_service", "--port", "8103"],
+        "label": "Kronos Agent     A2A :8103",
+    },
     "backend": {
         "cmd":   [sys.executable, "-m", "uvicorn", "backend.main:app",
                   "--host", "0.0.0.0", "--port", "8100", "--reload"],
@@ -34,6 +38,7 @@ print("  Dashboard  → http://localhost:8100")
 print("  API docs   → http://localhost:8100/docs")
 print("  Analysis   → http://localhost:8101/.well-known/agent.json")
 print("  Execution  → http://localhost:8102/.well-known/agent.json")
+print("  Kronos     → http://localhost:8103/.well-known/agent.json")
 print("  Ctrl+C to stop all\n")
 
 

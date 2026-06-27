@@ -4,7 +4,42 @@ A split-panel trading assistant with a live TradingView chart on the left and an
 
 ---
 
-## Recent Fixes (codebase audit)
+## Kronos Agent (Technical Analysis)
+
+`KronosAgent` (`backend/agents/kronos_agent.py`) is a **pure-Python, zero-LLM** technical analysis agent that runs before the LLM analysis and pre-computes:
+
+| Indicator | Detail |
+|---|---|
+| EMA 9 / 21 / 50 / SMA 200 | Trend alignment |
+| RSI (14) | Overbought / oversold zone |
+| ATR (14) | Volatility measure |
+| CPR (Central Pivot Range) | Pivot, BC, TC, R1/R2, S1/S2 |
+| Support / Resistance | Swing-high / swing-low from last 20 bars |
+| Candlestick patterns | Doji, Hammer, Engulfing, Morning/Evening Star, Marubozu, etc. |
+| Volume signal | High / low / normal vs 10-bar average |
+| Composite bias | Scored buy/sell/neutral signal combining all above |
+
+The `AnalysisAgent` calls Kronos in parallel with the existing MCP fetches (candles + metrics + news). Kronos context is injected into the LLM prompt as a structured block — the LLM validates the setup rather than discovering it from raw OHLCV.
+
+**Service:** `:8103`  
+**Fallback:** runs in-process if `:8103` is unreachable  
+**No LLM cost** — all pure Python math
+
+---
+
+## Candle Forecast Notebook
+
+`candle_forecast.ipynb` — backtestable forecast vs reality:
+
+1. Set `SYMBOL`, `INTERVAL`, `FORECAST_AT` (historical timestamp), `FORECAST_N`
+2. Fetches history up to that point → runs Kronos TA → calls LLM for N-candle forecast
+3. Fetches the real candles that followed
+4. Scores: direction hit/miss, target hit, SL hit, per-candle close error %
+5. Plots forecast vs reality side-by-side (dark theme)
+
+---
+
+
 
 | # | File | Fix |
 |---|---|---|
