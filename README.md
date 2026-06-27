@@ -4,7 +4,29 @@ A split-panel trading assistant with a live TradingView chart on the left and an
 
 ---
 
-## Kronos Agent (Technical Analysis)
+## Kronos Fine-Tune — XGBoost
+
+`kronos_train.ipynb` trains an XGBoost classifier on 5 years of candle data.
+
+**Features (28 total):**
+- EMA 9/21/50/SMA200 ratios (scale-invariant)
+- RSI(14), ATR % of price, body %
+- Trend label, CPR position, distance to support/resistance
+- Volume ratio vs 10-bar average
+- 16 candlestick pattern one-hot flags
+
+**Label:** `1` if `close[t+1] > close[t]`, else `0`
+
+**Output:** `models/kronos_{SYMBOL}_{INTERVAL}.json`
+
+Once trained, `KronosAgent` auto-loads the model on startup and uses the ML probability instead of the hand-coded score. Falls back to rule-based score if no model file exists.
+
+**Training steps:**
+1. Open `kronos_train.ipynb` — set `SYMBOL`, `INTERVAL`, `YEARS`
+2. Run all cells — fetches history, extracts features, trains, evaluates, saves
+3. Model auto-activates — no code change needed
+
+
 
 `KronosAgent` (`backend/agents/kronos_agent.py`) is a **pure-Python, zero-LLM** technical analysis agent that runs before the LLM analysis and pre-computes:
 

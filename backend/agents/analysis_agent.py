@@ -110,6 +110,13 @@ def _build_prompt(
             f"  Bullish: {sig.get('bull_patterns',[])}",
             f"  Bearish: {sig.get('bear_patterns',[])}",
             f"Composite bias: {sig.get('bias','?').upper()}  (score={sig.get('score',0)})",
+        ]
+        # ML model output — higher confidence signal when model is trained
+        if kronos.get("using_ml_model"):
+            lines.append(
+                f"ML model probability (UP): {kronos.get('ml_probability'):.4f}  "
+                f"→ {(kronos.get('ml_bias') or '?').upper()}"
+            )
             "=================================",
         ]
 
